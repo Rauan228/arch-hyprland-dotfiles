@@ -1,0 +1,12 @@
+[General]
+# Цвета берутся из палитры matugen (см. sddm/build-theme.sh); любой ключ можно править вручную.
+base=@BASE@
+text=@TEXT@
+subtext=@SUBTEXT@
+accent=@ACCENT@
+accent2=@ACCENT2@
+danger=#f38ba8
+fontFamily=JetBrainsMono Nerd Font
+# координаты для погоды (из ~/.cache/serpantinum/weather/weather.json; пусто — погода скрыта)
+lat=@LAT@
+lon=@LON@
