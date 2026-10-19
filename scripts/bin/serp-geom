@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# serp-geom — программы запоминают размер и место окна (как в Windows).
+#   save        запомнить геометрию всех плавающих окон по программе (class); вызывается из serp-fit
+#   apply ADDR  новое окно: если для его программы есть запомненная геометрия и это её единственное окно —
+#               поставить туда (развёрнутые — снова развернуть). Вызывается оболочкой при открытии окна.
+set -u
+store="${XDG_STATE_HOME:-$HOME/.local/state}/serpantinum/geometry.json"; mkdir -p "$(dirname "$store")"
+maxed="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed"
+here="$(dirname "$(readlink -f "$0")")"
+[ -s "$store" ] || echo '{}' > "$store"
+# окна оболочки и диалоги не запоминаем
+skip='^(org\.quickshell|quickshell|xdg-desktop-portal.*|polkit.*|serp-info|hyprland-run|)$'
+
+case "${1:-}" in
+  save)
+    clients=$(hyprctl clients -j)
+    # развёрнутые/прилипшие: запоминаем их «обычный» размер и признак развёрнутости
+    extra='{}'
+    for f in "$maxed"/0x*; do
+      [ -e "$f" ] || continue
+      read -r sx sy sw sh _ < "$f"
+      extra=$(jq -c --arg a "$(basename "$f")" --argjson x "$sx" --argjson y "$sy" --argjson w "$sw" --argjson h "$sh" '. + {($a): [$x, $y, $w, $h]}' <<<"$extra")
+    done
+    jq -c --argjson c "$clients" --argjson ex "$extra" --arg skip "$skip" --argjson mons "$(hyprctl monitors -j)" '
+      . as $old
+      | reduce ($c[] | select(.floating and .mapped and .workspace.id > 0 and .fullscreen == 0 and (.class | test($skip) | not))) as $w
+          ($old;
+           ($ex[$w.address]) as $e
+           | ($mons[] | select(.id == $w.monitor) | .name) as $mon
+           | .[$w.class] = { x: ($e[0] // $w.at[0]), y: ($e[1] // $w.at[1]), w: ($e[2] // $w.size[0]), h: ($e[3] // $w.size[1]),
+                             monitor: $mon, max: (($e != null) and ($w.size[0] >= (($mons[] | select(.id == $w.monitor) | .width / .scale) - 2))) })
+    ' "$store" > "$store.tmp" && mv "$store.tmp" "$store" ;;
+  apply)
+    a="${2:-}"; [ -n "$a" ] || exit 0
+    a="0x${a#0x}"
+    cls=$(hyprctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | .class')
+    [ -n "$cls" ] || exit 0
+    [[ "$cls" =~ $skip ]] && exit 0
+    n=$(hyprctl clients -j | jq --arg c "$cls" '[.[] | select(.class == $c and .workspace.id > 0)] | length')
+    [ "$n" -eq 1 ] || exit 0
+    g=$(jq -c --arg c "$cls" '.[$c] // empty' "$store"); [ -n "$g" ] || exit 0
+    read -r x y w h mon max < <(jq -r '"\(.x) \(.y) \(.w) \(.h) \(.monitor) \(.max)"' <<<"$g")
+    # монитор отключён — не трогаем (окно откроется по центру)
+    hyprctl monitors -j | jq -e --arg m "$mon" 'any(.[]; .name == $m)' >/dev/null || exit 0
+    hyprctl dispatch "hl.dsp.window.resize({ x = $w, y = $h, window = \"address:$a\" })" >/dev/null
+    hyprctl dispatch "hl.dsp.window.move({ x = $x, y = $y, window = \"address:$a\" })" >/dev/null
+    [ "$max" = true ] && "$here/serp-max" maximize "$a" "$x" "$y" "$w" "$h" ;;
+  *) echo "usage: serp-geom save | apply ADDR" >&2; exit 2 ;;
+esac
