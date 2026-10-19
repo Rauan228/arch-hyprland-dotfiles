@@ -52,11 +52,13 @@ for _, name in ipairs(MICE) do
 end
 
 -- ---------- жесты тачпада как в Windows ----------
--- 3 пальца влево/вправо — соседнее окно текущего рабочего стола (по порядку, как кнопки на панели задач;
---   свёрнутые разворачиваются) — scripts/bin/serp-cycle
+-- 3 пальца влево/вправо — Alt+Tab: появляется окно со всеми окнами, каждый свайп двигает выбор,
+--   через ~0,8 с после последнего свайпа выбранное окно открывается (overlay/quickshell/switcher)
 -- 4 пальца влево/вправо — соседний рабочий стол сразу на всех мониторах — scripts/bin/serp-desk
-local bin = os.getenv("HOME") .. "/.config/serpantinum/bin/"
-hl.gesture({ fingers = 3, direction = "left",  action = function() hl.exec_cmd(bin .. "serp-cycle next") end })
-hl.gesture({ fingers = 3, direction = "right", action = function() hl.exec_cmd(bin .. "serp-cycle prev") end })
+local home = os.getenv("HOME")
+local bin = home .. "/.config/serpantinum/bin/"
+local switcher = "quickshell -p " .. home .. "/.local/share/serpantinum/runtime/quickshell/Shell.qml ipc call switcher swipe "
+hl.gesture({ fingers = 3, direction = "left",  action = function() hl.exec_cmd(switcher .. "1") end })
+hl.gesture({ fingers = 3, direction = "right", action = function() hl.exec_cmd(switcher .. "-1") end })
 hl.gesture({ fingers = 4, direction = "left",  action = function() hl.exec_cmd(bin .. "serp-desk next") end })
 hl.gesture({ fingers = 4, direction = "right", action = function() hl.exec_cmd(bin .. "serp-desk prev") end })

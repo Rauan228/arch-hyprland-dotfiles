@@ -111,7 +111,15 @@ Scope {
         var a = wins.slice(); a.splice(sel, 1); wins = a;
         if (!wins.length) close(); else sel = Math.min(sel, wins.length - 1);
     }
-    function close() { sticky = false; mode = ""; shown = false; pendingCommit = false; showTimer.stop(); assistZones = []; assistUsed = []; }
+    function close() { sticky = false; mode = ""; shown = false; pendingCommit = false; showTimer.stop(); swipeTimer.stop(); assistZones = []; assistUsed = []; }
+    // Alt+Tab жестом тачпада (3 пальца, scripts/bin/serp-cycle): окно со всеми окнами показывается сразу,
+    // каждый свайп двигает выбор, а через паузу выбранное открывается — как отпустить Alt
+    function swipe(step) {
+        altTab(step);
+        sticky = true; shown = true;
+        swipeTimer.restart();
+    }
+    Timer { id: swipeTimer; interval: 800; onTriggered: if (sw.mode === "alttab") { if (sw.wins.length || clientsProc.running) sw.commit(); else sw.close(); } }
     function openView() {
         if (mode === "view") { close(); return; }
         mode = "view"; shown = true; sel = 0;
@@ -190,6 +198,7 @@ Scope {
         target: "switcher"
         function next(): void { sw.altTab(1) }
         function prev(): void { sw.altTab(-1) }
+        function swipe(step: int): void { sw.swipe(step) }
         function sticky(): void { if (sw.mode === "alttab") { sw.altTab(1); return; } sw.altTab(1); sw.sticky = true; sw.shown = true }
         function commit(): void { if (sw.mode === "alttab") { if (sw.wins.length || clientsProc.running) sw.commit(); else sw.close(); } }
         function view(): void { sw.openView() }
