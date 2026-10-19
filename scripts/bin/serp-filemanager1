@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""D-Bus служба org.freedesktop.FileManager1 → «Диспетчер файлов» Serpantinum.
+Через неё браузеры, Telegram и др. делают «Показать в папке». Запускается D-Bus по требованию,
+сама завершается после 2 минут простоя."""
+import ctypes, os, subprocess, dbus, dbus.service
+from dbus.mainloop.glib import DBusGMainLoop
+
+# цикл событий GLib напрямую из libglib (без python-gobject)
+glib = ctypes.CDLL("libglib-2.0.so.0")
+glib.g_main_loop_new.restype = ctypes.c_void_p
+glib.g_main_loop_new.argtypes = [ctypes.c_void_p, ctypes.c_int]
+glib.g_main_loop_run.argtypes = [ctypes.c_void_p]
+glib.g_main_loop_quit.argtypes = [ctypes.c_void_p]
+glib.g_source_remove.argtypes = [ctypes.c_uint]
+SOURCEFUNC = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)
+glib.g_timeout_add_seconds.argtypes = [ctypes.c_uint, SOURCEFUNC, ctypes.c_void_p]
+glib.g_timeout_add_seconds.restype = ctypes.c_uint
+
+SERP = os.path.expanduser("~/.config/serpantinum/bin/serp-files")
+IFACE = "org.freedesktop.FileManager1"
+
+class FileManager1(dbus.service.Object):
+    def __init__(self, bus, loop):
+        super().__init__(bus, "/org/freedesktop/FileManager1")
+        self.loop, self.timer = loop, None
+        self.touch()
+
+    def touch(self):
+        if self.timer:
+            glib.g_source_remove(self.timer)
+        self.timer = glib.g_timeout_add_seconds(120, QUIT, None)
+
+    def run(self, uri):
+        self.touch()
+        subprocess.Popen([SERP, str(uri)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    @dbus.service.method(IFACE, in_signature="ass", out_signature="")
+    def ShowFolders(self, uris, startup_id):
+        for u in uris[:1]: self.run(u)
+
+    @dbus.service.method(IFACE, in_signature="ass", out_signature="")
+    def ShowItems(self, uris, startup_id):
+        for u in uris[:1]: self.run(u)
+
+    @dbus.service.method(IFACE, in_signature="ass", out_signature="")
+    def ShowItemProperties(self, uris, startup_id):
+        for u in uris[:1]: self.run(u)
+
+DBusGMainLoop(set_as_default=True)
+bus = dbus.SessionBus()
+name = dbus.service.BusName(IFACE, bus, do_not_queue=True)
+loop = glib.g_main_loop_new(None, 0)
+QUIT = SOURCEFUNC(lambda _: (glib.g_main_loop_quit(loop), 0)[1])
+FileManager1(bus, loop)
+glib.g_main_loop_run(loop)
