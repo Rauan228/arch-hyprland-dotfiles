@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# serp-win <min|restore|max|close> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
+# serp-win <min|restore|max|close|special> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
 # Окно: 0xADDR — это окно; имя монитора — последнее сфокусированное окно на его рабочем столе; иначе — активное.
 #   min      свернуть как в Windows: окно уходит в скрытый special:minimized, запоминается, с какого
 #            рабочего стола оно ушло, а фокус переходит на следующее окно под ним (а не остаётся на невидимом)
@@ -8,6 +8,25 @@ set -euo pipefail
 act="${1:-}"; arg="${2:-}"; arg="${arg#address:}"   # принимаем и 0xADDR, и address:0xADDR
 state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"; mkdir -p "$state"
 d() { hyprctl dispatch "$1" >/dev/null; }
+
+# special МОНИТОР — оболочка зовёт, когда на мониторе сам открылся скрытый стол свёрнутых окон
+# (программа попросила фокус: Telegram/VS Code делают это сразу после своего «─» или по уведомлению).
+# Стол свёрнутых никогда не показываем: только что свёрнутое (< 2 с) остаётся свёрнутым,
+# а позже активированное (клик по уведомлению) возвращаем на своё место.
+if [ "$act" = special ]; then
+  read -r a wsn < <(hyprctl activewindow -j | jq -r '"\(.address // "") \(.workspace.name // "")"')
+  f="$state/$a"
+  if [ -n "$a" ] && [ "$wsn" = special:minimized ] && { [ ! -e "$f" ] || [ $(( $(date +%s) - $(stat -c %Y "$f") )) -ge 2 ]; }; then
+    exec "$0" restore "$a"
+  fi
+  d "hl.dsp.focus({ monitor = \"$arg\" })"
+  d 'hl.dsp.workspace.toggle_special("minimized")'
+  ws=$(hyprctl monitors -j | jq -r --arg m "$arg" '.[] | select(.name == $m) | .activeWorkspace.id')
+  next=$(hyprctl clients -j | jq -r --argjson ws "${ws:-0}" '[.[] | select(.workspace.id == $ws and .mapped and (.hidden | not))]
+                                                         | sort_by(.focusHistoryID) | .[0].address // empty')
+  [ -n "$next" ] && d "hl.dsp.focus({ window = \"address:$next\" })"
+  exit 0
+fi
 
 clients=$(hyprctl clients -j)
 case "$arg" in

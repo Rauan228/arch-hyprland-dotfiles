@@ -27,6 +27,11 @@ ShellRoot {
             if (fitEvents.indexOf(ev.name) >= 0) fitTimer.restart();
             // новое окно — открыть там, где программа была в прошлый раз (scripts/bin/serp-geom)
             if (ev.name === "openwindow") { geomTimer.addr = String(ev.data).split(",")[0]; geomTimer.restart(); }
+            // скрытый стол свёрнутых окон открылся сам (программа попросила фокус) — сразу закрыть (scripts/bin/serp-win)
+            if (ev.name === "activespecial" && String(ev.data).indexOf("special:minimized,") === 0) {
+                Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "special", String(ev.data).split(",")[1]]);
+                return;
+            }
             if (ev.name !== "minimized" && ev.name !== "minimize") return;
             var p = String(ev.data).split(",");
             if (p.length > 1 && p[1] === "1")   // свернуть как кнопкой «─» в заголовке (scripts/bin/serp-win)
