@@ -68,17 +68,19 @@ minimize() {
   tw=$(( ww / 8 > 48 ? ww / 8 : 48 )); th=$(( hh / 8 > 32 ? hh / 8 : 32 ))
   tx=$(( mx + mw / 2 - tw / 2 )); ty=$(( my + mh - th - 6 ))
   echo "$ws $x $y $ww $hh $op $tx $ty $tw $th" > "$state/$addr"
-  anim in; geom "$addr" "$tx" "$ty" "$tw" "$th" 0; sleep "$ANIM"
-  d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
-  anim default
-  # фокус — следующему окну на том же столе (по истории фокуса), как в Windows
+  # следующее окно на том же столе (по истории фокуса) — получит фокус, как в Windows
   next=$(jq -r --arg a "$addr" --argjson ws "$ws" '[.[] | select(.address != $a and .workspace.id == $ws and .mapped and (.hidden | not))]
                                                    | sort_by(.focusHistoryID) | .[0].address // empty' <<<"$clients")
+  anim in; geom "$addr" "$tx" "$ty" "$tw" "$th" 0; sleep "$ANIM"
+  # фокус отдаём ДО переноса: иначе Hyprland сам ищет, кому отдать фокус, берёт уже свёрнутое окно
+  # из истории, открывает скрытый стол — и на мгновение мелькают свёрнутые окна
   if [ -n "$next" ]; then
     d "hl.dsp.focus({ window = \"address:$next\" })"
   else
     d "hl.dsp.focus({ workspace = \"$ws\" })"                     # стол пуст — снять фокус с невидимого окна
   fi
+  d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
+  anim default
 }
 
 restore() {
