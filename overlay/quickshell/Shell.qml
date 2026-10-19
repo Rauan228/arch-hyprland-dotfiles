@@ -3,8 +3,8 @@
 // Не включены: Idle (используем hypridle), WidgetLoader/WidgetRedactor, Floating, ScreenshotOverlay
 // (вместо него — свой скриншотер snip/ в стиле Lightshot).
 import QtQuick
-import Qt.labs.folderlistmodel
 import Quickshell
+import Quickshell.Io
 import Quickshell.Hyprland
 import "taskmgr"
 import "snip"
@@ -35,21 +35,31 @@ ShellRoot {
     }
 
     // Окна не должны «улетать» за край: после событий окон (и раз в 4 с) serp-fit возвращает плавающие окна
-    // в пределы монитора — уменьшает слишком большие и опускает те, у которых заголовок ушёл за верхний край
-    readonly property var fitEvents: ["openwindow", "movewindowv2", "changefloatingmode", "activewindowv2", "monitoradded", "monitorremoved", "fullscreen"]
+    // в пределы монитора — уменьшает слишком большие и опускает те, у которых заголовок ушёл за верхний край.
+    // Запуски не накладываются: пока идёт один, следующий только откладывается (раньше копии копились и
+    // засыпали Hyprland запросами — отсюда подвисания и задержка ввода). Смена фокуса окна сюда не входит.
+    readonly property var fitEvents: ["openwindow", "movewindowv2", "changefloatingmode", "monitoradded", "monitorremoved", "fullscreen"]
     readonly property string fitCmd: Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-fit"
     Timer { id: geomTimer; interval: 180; property string addr: ""
             onTriggered: Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-geom", "apply", addr]) }
-    Timer { id: fitTimer; interval: 350; onTriggered: Quickshell.execDetached([shellRoot.fitCmd]) }
-    Timer { interval: 4000; running: true; repeat: true; onTriggered: Quickshell.execDetached([shellRoot.fitCmd]) }
-    // пока есть «развёрнутые» окна (scripts/bin/serp-max) — проверяем часто, чтобы потянутое за заголовок
-    // развёрнутое окно сразу вернулось к прежнему размеру, как в Windows
-    FolderListModel {
-        id: maxedDir
-        folder: "file://" + (Quickshell.env("XDG_RUNTIME_DIR") || "/run/user/1000") + "/serpantinum/maxed"
-        showDirs: false; showHidden: false
+    Process {
+        id: fitProc
+        property bool again: false
+        command: [shellRoot.fitCmd]
+        onExited: if (again) { again = false; running = true; }
     }
-    Timer { interval: 250; running: maxedDir.count > 0; repeat: true; onTriggered: Quickshell.execDetached([shellRoot.fitCmd]) }
+    function runFit() { if (fitProc.running) fitProc.again = true; else fitProc.running = true; }
+    Timer { id: fitTimer; interval: 350; onTriggered: shellRoot.runFit() }
+    Timer { interval: 4000; running: true; repeat: true; onTriggered: shellRoot.runFit() }
+    // «развёрнутые» окна (scripts/bin/serp-max): потянули за заголовок — сразу прежний размер, как в Windows.
+    // Следит один постоянный процесс без порождения hyprctl/jq (scripts/bin/serp-maxwatch).
+    Process {
+        id: maxWatch
+        command: [Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-maxwatch"]
+        running: true
+        onExited: restartWatch.start()          // упал — перезапустить через 2 с
+    }
+    Timer { id: restartWatch; interval: 2000; onTriggered: maxWatch.running = true }
 
     WallpaperEngine {}
     Main {}

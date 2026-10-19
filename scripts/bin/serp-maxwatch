@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""serp-maxwatch — следит за «развёрнутыми» окнами (serp-max) и зовёт `serp-max check` только когда нужно:
+окно потянули за заголовок (сдвинулось, размер прежний) → вернуть прежний размер; размер изменили или окно
+закрыли → забыть. Раньше это делал опрос `serp-fit` раз в 250 мс: десятки процессов hyprctl/jq в секунду,
+и Hyprland всё время отвлекался на них (подвисания и задержка ввода).
+Здесь — один процесс, запросы к Hyprland прямо через сокет, и только пока есть развёрнутые окна."""
+import json, os, socket, subprocess, time
+
+RUN = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+MAXED = f"{RUN}/serpantinum/maxed"
+SOCK = f"{RUN}/hypr/{os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', '')}/.socket.sock"
+SERP_MAX = os.path.join(os.path.dirname(os.path.realpath(__file__)), "serp-max")
+
+def hypr(cmd):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        s.connect(SOCK)
+        s.sendall(cmd.encode())
+        buf = b""
+        while chunk := s.recv(65536):
+            buf += chunk
+    return json.loads(buf)
+
+def needs_check(files):
+    clients = {c["address"]: c for c in hypr("j/clients")}
+    for a in files:
+        try:
+            if time.time() - os.stat(f"{MAXED}/{a}").st_mtime < 1:
+                continue                                          # serp-max ещё ставит окно на место
+        except OSError:
+            continue
+        c = clients.get(a)
+        if c is None:
+            return True                                           # окно закрыто — убрать запись
+        try:
+            _, _, _, _, ax, ay, aw, ah = open(f"{MAXED}/{a}").read().split()
+        except (OSError, ValueError):
+            return True
+        if [c["at"][0], c["at"][1], c["size"][0], c["size"][1]] != [int(ax), int(ay), int(aw), int(ah)]:
+            return True                                           # сдвинули или изменили размер
+    return False
+
+while True:
+    try:
+        files = [f for f in os.listdir(MAXED) if f.startswith("0x")]
+    except OSError:
+        files = []
+    if not files:
+        time.sleep(1)                                             # развёрнутых нет — почти не просыпаемся
+        continue
+    try:
+        if needs_check(files):
+            subprocess.run([SERP_MAX, "check"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        time.sleep(1)
+    time.sleep(0.15)
