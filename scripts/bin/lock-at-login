@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Блокировка сразу после входа (автовход SDDM): ждёт, пока оболочка Serpantinum зарегистрирует экран
+# блокировки, и включает его в «статичном» режиме (фон — размытые обои). Если за 15 с оболочка не готова —
+# резервный hyprlock, чтобы сессия ни в коем случае не осталась открытой.
+export SERPANTINUM_DIR="${SERPANTINUM_RUNTIME:-$HOME/.local/share/serpantinum/runtime}"
+source "$SERPANTINUM_DIR/scripts/caching.sh" 2>/dev/null || exec hyprlock
+for _ in $(seq 1 60); do
+  if pgrep -f "quickshell -p $MAIN_QML" >/dev/null && quickshell -p "$MAIN_QML" ipc show 2>/dev/null | grep -q '^target lock'; then
+    quickshell -p "$MAIN_QML" ipc call lock activateStatic && exit 0
+  fi
+  sleep 0.25
+done
+exec hyprlock

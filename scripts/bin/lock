@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Блокировка экрана: оригинальный экран Serpantinum через IPC демона.
+# Если демон не запущен или не отвечает — резервный hyprlock.
+pidof hyprlock >/dev/null && exit 0
+export SERPANTINUM_DIR="${SERPANTINUM_RUNTIME:-$HOME/.local/share/serpantinum/runtime}"
+source "$SERPANTINUM_DIR/scripts/caching.sh" 2>/dev/null || exec hyprlock
+if pgrep -f "quickshell -p $MAIN_QML" >/dev/null && quickshell -p "$MAIN_QML" ipc call lock activate 2>/dev/null; then
+  exit 0
+fi
+exec hyprlock
