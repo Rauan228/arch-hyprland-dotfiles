@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="300" viewBox="0 0 128 150">
+  <!-- Пингвин в бирюзовой гамме (по мотивам Tux) -->
+  <path d="M30 128 C26 112 22 100 26 86 C30 72 36 66 38 52 C40 30 48 10 64 10 C80 10 88 30 90 52 C92 66 98 72 102 86 C106 100 102 112 98 128 Z" fill="#2fa9bd"/>
+  <path d="M38 120 C34 104 36 92 42 82 C48 72 50 66 64 66 C78 66 80 72 86 82 C92 92 94 104 90 120 Z" fill="#dff8fb"/>
+  <ellipse cx="54" cy="38" rx="8" ry="10" fill="#f4fdff"/><ellipse cx="74" cy="38" rx="8" ry="10" fill="#f4fdff"/>
+  <ellipse cx="56" cy="40" rx="3.4" ry="4.6" fill="#0a1c24"/><ellipse cx="72" cy="40" rx="3.4" ry="4.6" fill="#0a1c24"/>
+  <path d="M50 52 C56 47 72 47 78 52 C74 60 54 60 50 52 Z" fill="#9ce6ef"/>
+  <path d="M26 92 C18 100 16 112 22 118 C26 108 30 100 32 94 Z" fill="#2393a6"/>
+  <path d="M102 92 C110 100 112 112 106 118 C102 108 98 100 96 94 Z" fill="#2393a6"/>
+  <ellipse cx="44" cy="134" rx="17" ry="7" fill="#9ce6ef"/><ellipse cx="84" cy="134" rx="17" ry="7" fill="#9ce6ef"/>
+</svg>

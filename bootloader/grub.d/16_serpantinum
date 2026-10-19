@@ -1,0 +1,33 @@
+#!/bin/sh
+# Serpantinum: собственная запись Arch (Unified Kernel Image с ESP). Заменяет автоматическую 15_uki.
+# Предпочитает UKI без «fallback» в имени; если такого нет — берёт первый .efi из /EFI/Linux.
+cat << 'ENTRY'
+if [ "$grub_platform" = "efi" ]; then
+  menuentry "Arch" --class arch --class gnu-linux --class os --hotkey=a --id serpantinum-arch {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    insmod regexp
+    set kimg=""
+    for f in /EFI/Linux/*.efi; do
+      if regexp 'fallback' "$f"; then
+        continue
+      fi
+      set kimg="$f"
+      break
+    done
+    if [ -z "$kimg" ]; then
+      for f in /EFI/Linux/*.efi; do
+        set kimg="$f"
+        break
+      done
+    fi
+    if [ -z "$kimg" ]; then
+      echo "UKI не найден в /EFI/Linux"
+      sleep 6
+    else
+      chainloader "$kimg"
+    fi
+  }
+fi
+ENTRY

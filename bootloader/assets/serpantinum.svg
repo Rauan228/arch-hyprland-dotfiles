@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#2dd4bf"/></linearGradient>
+    <linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dff7f3"/></linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#g)"/>
+  <!-- змея: S-образная кривая -->
+  <path d="M168 74 C168 50 92 48 92 92 C92 128 164 124 164 164 C164 206 86 206 86 180" fill="none" stroke="url(#s)" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="178" cy="68" r="11" fill="#0b0d17"/>
+  <circle cx="181" cy="65" r="3.6" fill="#ffffff"/>
+</svg>

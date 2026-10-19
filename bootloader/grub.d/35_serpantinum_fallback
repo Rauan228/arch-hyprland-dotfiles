@@ -1,0 +1,9 @@
+#!/bin/sh
+# Резервный запуск: штатная команда uki (меню UKI от GRUB). Остаётся третьим пунктом, ниже видимой области.
+cat << 'ENTRY'
+if [ "$grub_platform" = "efi" ]; then
+  submenu "Резерв" --class serpfallback --id serpantinum-uki-fallback {
+    uki
+  }
+fi
+ENTRY

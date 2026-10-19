@@ -1,0 +1,35 @@
+# Serpantinum — тема GRUB по референсу (плитки в ряд).
+# Всё статичное нарисовано в background.png; ряд плиток — иконка выбранного пункта (см. build-theme.sh).
+# Выражения без пробелов. Координаты абсолютные для экрана 1920x1080.
+
+desktop-image: "background.png"
+desktop-color: "#0b0d0e"
+title-text: ""
+
++ boot_menu {
+    left = @RX@
+    top = @RY@
+    width = @RW@
+    height = @RH@
+    item_height = @RH@
+    item_spacing = 0
+    item_padding = 0
+    icon_width = @RW@
+    icon_height = @RH@
+    item_icon_space = 3000
+    item_font = "JetBrainsMono NF Regular 20"
+    item_color = "#cfd8dc"
+    selected_item_color = "#ffffff"
+    scrollbar = false
+}
+
++ label {
+    id = "__timeout__"
+    top = 782
+    left = 0
+    width = 100%
+    align = "center"
+    text = "Booting automatically in %d seconds"
+    font = "JetBrainsMono NF Regular 20"
+    color = "#cfd8dc"
+}

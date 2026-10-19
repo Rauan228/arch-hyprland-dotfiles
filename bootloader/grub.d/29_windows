@@ -1,0 +1,11 @@
+#!/bin/sh
+# Serpantinum: запись Windows 11 (chainloader на ESP Windows). Горячая клавиша W.
+cat << 'ENTRY'
+menuentry "Windows 11" --class windows --class os --hotkey=w --id serpantinum-windows {
+    insmod part_gpt
+    insmod fat
+    insmod chain
+    search --no-floppy --fs-uuid --set=root 2211-1D95
+    chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+}
+ENTRY
