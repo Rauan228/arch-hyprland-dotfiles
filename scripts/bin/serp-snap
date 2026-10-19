@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# serp-snap — раскладка окон как в Windows.
+#   left | right | max | down              Win+←/→/↑/↓ для активного окна (← → у края — на соседний монитор, как в Windows)
+#   zone ZONE [ADDR] [MONITOR]             поставить окно в зону рабочей области монитора:
+#        left right tl tr bl br max        половины, четверти, весь экран
+#        frac:X,Y,W,H                      доли рабочей области 0..1 (раскладки Win+Z)
+#   monitor next|prev [ADDR]               перенести окно на соседний монитор (Win+Shift+←/→)
+# Прежний размер окна запоминается (как у serp-max): потянули прилипшее окно за заголовок — размер вернётся.
+set -u
+BAR=32; GAP=4
+dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed"; mkdir -p "$dir"
+here="$(dirname "$(readlink -f "$0")")"
+d() { hyprctl dispatch "$1" >/dev/null; }
+active() { hyprctl activewindow -j | jq -r '.address // empty'; }
+info() { hyprctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.fullscreen) \(.monitor)"'; }
+monid() { hyprctl monitors -j | jq -r --arg n "$1" '.[] | select(.name == $n) | .id'; }
+area() {   # рабочая область монитора (без панелей) → x y w h
+  hyprctl monitors -j | jq -r --argjson id "$1" '.[] | select(.id == $id) |
+    "\(.x + .reserved[0]) \(.y + .reserved[1]) \(((.width / .scale) | floor) - .reserved[0] - .reserved[2]) \(((.height / .scale) | floor) - .reserved[1] - .reserved[3])"'
+}
+frac() {
+  case "$1" in
+    left) echo "0 0 0.5 1" ;; right) echo "0.5 0 0.5 1" ;; max) echo "0 0 1 1" ;;
+    tl) echo "0 0 0.5 0.5" ;; tr) echo "0.5 0 0.5 0.5" ;; bl) echo "0 0.5 0.5 0.5" ;; br) echo "0.5 0.5 0.5 0.5" ;;
+    frac:*) echo "${1#frac:}" | tr ',' ' ' ;;
+  esac
+}
+
+zone() {   # zone ADDR MONID → поставить окно
+  local z=$1 a=$2 mid=$3 x y w h fs mon ax ay aw ah fx fy fw fh zx zy zw zh nx ny nw nh
+  read -r x y w h fs mon < <(info "$a"); [ -n "${mon:-}" ] || return
+  [ -n "$mid" ] || mid=$mon
+  read -r ax ay aw ah < <(area "$mid")
+  read -r fx fy fw fh < <(frac "$z"); [ -n "${fh:-}" ] || return
+  [ "$fs" != 0 ] && d "hl.dsp.window.fullscreen({ mode = \"maximized\", action = \"unset\", window = \"address:$a\" })"
+  # прежний размер запоминаем один раз (если окно уже было прилипшим/развёрнутым — берём запомненный)
+  if [ -f "$dir/$a" ]; then read -r x y w h _ < "$dir/$a"; fi
+  if [ "$z" = max ]; then exec "$here/serp-max" maximize "$a" "$x" "$y" "$w" "$h"; fi
+  read -r zx zy zw zh < <(awk -v ax="$ax" -v ay="$ay" -v aw="$aw" -v ah="$ah" -v fx="$fx" -v fy="$fy" -v fw="$fw" -v fh="$fh" \
+    'BEGIN { printf "%d %d %d %d\n", ax + fx * aw, ay + fy * ah, fw * aw, fh * ah }')
+  nx=$(( zx + GAP )); ny=$(( zy + BAR + GAP )); nw=$(( zw - 2 * GAP )); nh=$(( zh - BAR - 2 * GAP ))
+  d "hl.dsp.window.float({ action = \"enable\", window = \"address:$a\" })"
+  d "hl.dsp.window.resize({ x = $nw, y = $nh, window = \"address:$a\" })"
+  d "hl.dsp.window.move({ x = $nx, y = $ny, window = \"address:$a\" })"
+  # у программы может быть минимальный размер больше зоны (Spotify — 800 px): тогда прижимаем окно
+  # к краю зоны, который совпадает с краем экрана, чтобы оно не уезжало за экран
+  sleep 0.25
+  local rx ry rw rh _f _m
+  read -r rx ry rw rh _f _m < <(info "$a")
+  if [ "${rw:-$nw}" -gt "$nw" ] || [ "${rh:-$nh}" -gt "$nh" ]; then
+    [ "$rw" -gt "$nw" ] && { if [ $(( zx + zw )) -ge $(( ax + aw - 1 )) ]; then nx=$(( zx + zw - GAP - rw )); else nx=$(( zx + GAP )); fi; }
+    [ "$rh" -gt "$nh" ] && { if [ $(( zy + zh )) -ge $(( ay + ah - 1 )) ]; then ny=$(( zy + zh - GAP - rh )); else ny=$(( zy + BAR + GAP )); fi; }
+    nw=$rw; nh=$rh
+    d "hl.dsp.window.move({ x = $nx, y = $ny, window = \"address:$a\" })"
+  fi
+  echo "$x $y $w $h $nx $ny $nw $nh" > "$dir/$a"
+}
+
+tomonitor() {   # окно на соседний монитор, с сохранением относительного места и размера
+  local dirn=$1 a=$2 x y w h fs mon n ids i t ax ay aw ah bx by bw bh
+  read -r x y w h fs mon < <(info "$a"); [ -n "${mon:-}" ] || return
+  ids=($(hyprctl monitors -j | jq -r 'sort_by(.x) | .[].id')); n=${#ids[@]}; [ "$n" -gt 1 ] || return
+  for i in "${!ids[@]}"; do [ "${ids[$i]}" = "$mon" ] && break; done
+  if [ "$dirn" = next ]; then t=${ids[$(( (i + 1) % n ))]}; else t=${ids[$(( (i - 1 + n) % n ))]}; fi
+  read -r ax ay aw ah < <(area "$mon"); read -r bx by bw bh < <(area "$t")
+  rm -f "$dir/$a"
+  read -r x y w h < <(awk -v x="$x" -v y="$y" -v w="$w" -v h="$h" -v ax="$ax" -v ay="$ay" -v aw="$aw" -v ah="$ah" -v bx="$bx" -v by="$by" -v bw="$bw" -v bh="$bh" \
+    'BEGIN { sx = bw / aw; sy = bh / ah; printf "%d %d %d %d\n", bx + (x - ax) * sx, by + (y - ay) * sy, w * sx, h * sy }')
+  d "hl.dsp.window.resize({ x = $w, y = $h, window = \"address:$a\" })"
+  d "hl.dsp.window.move({ x = $x, y = $y, window = \"address:$a\" })"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  left|right)
+    a=$(active); [ -n "$a" ] || exit 0
+    # как в Windows: окно уже у этого края → на соседний монитор, к противоположному краю
+    if [ -f "$dir/$a" ]; then
+      read -r _ _ _ _ zx _ zw _ < "$dir/$a"; read -r x y w h fs mon < <(info "$a"); read -r ax ay aw ah < <(area "$mon")
+      if [ "$cmd" = left ] && [ "$zx" -le $(( ax + GAP )) ] && [ "$zw" -lt "$aw" ]; then
+        tomonitor prev "$a"; read -r x y w h fs mon < <(info "$a"); zone right "$a" "$mon"; exit 0; fi
+      if [ "$cmd" = right ] && [ $(( zx + zw )) -ge $(( ax + aw - GAP )) ] && [ "$zw" -lt "$aw" ]; then
+        tomonitor next "$a"; read -r x y w h fs mon < <(info "$a"); zone left "$a" "$mon"; exit 0; fi
+    fi
+    zone "$cmd" "$a" "" ;;
+  max)  a=$(active); [ -n "$a" ] && exec "$here/serp-max" toggle "$a" ;;
+  down) a=$(active); [ -n "$a" ] || exit 0
+        read -r x y w h fs mon < <(info "$a")
+        if [ -f "$dir/$a" ] || [ "$fs" = 1 ]; then exec "$here/serp-max" restore "$a"
+        else d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"address:$a\", silent = true })"; fi ;;
+  zone) z=$2; a="${3:-$(active)}"; m="${4:-}"; [ -n "$a" ] || exit 0
+        [ -n "$m" ] && m=$(monid "$m")
+        zone "$z" "$a" "$m" ;;
+  monitor) a="${3:-$(active)}"; [ -n "$a" ] && tomonitor "${2:-next}" "$a" ;;
+  *) echo "usage: serp-snap left|right|max|down | zone ZONE [ADDR] [MONITOR] | monitor next|prev [ADDR]" >&2; exit 2 ;;
+esac

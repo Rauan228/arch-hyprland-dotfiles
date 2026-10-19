@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# serp-snapzone — вызывается плагином заголовков (snap_command) при перетаскивании окна:
+#   preview ZONE|none MONITOR      подсветить будущее место окна (оверлей оболочки)
+#   drop ZONE MONITOR ADDR         окно отпустили у края: поставить в зону и предложить окна
+#                                  для оставшихся мест (Snap Assist), как в Windows
+main="$HOME/.local/share/serpantinum/runtime/quickshell/Shell.qml"
+here="$(dirname "$(readlink -f "$0")")"
+ipc() { quickshell -p "$main" ipc call switcher "$@" >/dev/null 2>&1; }
+case "${1:-}" in
+  preview) ipc snapPreview "${2:-none}" "${3:--}" ;;
+  drop)
+    z=$2; m=$3; a=$4
+    ipc snapPreview none -
+    "$here/serp-snap" zone "$z" "$a" "$m"
+    case "$z" in
+      left) rest="right" ;; right) rest="left" ;;
+      tl) rest="tr bl br" ;; tr) rest="tl bl br" ;; bl) rest="tl tr br" ;; br) rest="tl tr bl" ;;
+      *) rest="" ;;
+    esac
+    [ -n "$rest" ] && ipc assist "$rest" "$m" "$a" ;;
+esac
