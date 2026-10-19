@@ -18,7 +18,7 @@ index c27653d..fa4d50b 100644
 +    if (g_pGlobalState->config.buttonStyle->value() == "windows") {
 +        const int i = windowsButtonAt(COORDS);
 +        if (i >= 0) {
-+            g_pKeybindManager->m_dispatchers["exec"](g_pGlobalState->buttons[i].cmd);
++            Config::Supplementary::executor()->spawn(g_pGlobalState->buttons[i].cmd);   // как двойной клик: старый "exec" в Lua-конфиге ничего не делал
 +            return true;
 +        }
 +        return false;
