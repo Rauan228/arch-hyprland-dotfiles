@@ -64,11 +64,21 @@ for grp, bg, alt in [("View", "38,39,52", "43,44,58"), ("Window", "31,32,43", "3
         ForegroundVisited="183,131,240")
 put("Colors:Selection", BackgroundNormal=sel, BackgroundAlternate="66,69,160", DecorationFocus=accent, DecorationHover=accent,
     ForegroundNormal="255,255,255", ForegroundInactive="220,222,240")
-put("General", ColorScheme="Serpantinum", TerminalApplication="kitty", TerminalService="kitty.desktop",
+put("General", ColorScheme="Serpantinum", Name="Serpantinum", TerminalApplication="kitty", TerminalService="kitty.desktop",
     font="Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1", AccentColor=accent)
 put("Icons", Theme="breeze-dark")
 put("KDE", widgetStyle="Breeze", SingleClick="false")
 with open(dst, "w", encoding="utf-8") as f: cp.write(f, space_around_delimiters=False)
+# та же схема отдельным файлом: KDE-программы ищут ColorScheme=Serpantinum по имени,
+# а без файла откатываются на светлую Breeze и перебивают палитру qt6ct
+import os
+sch = configparser.RawConfigParser(); sch.optionxform = str
+for sec in [x for x in cp.sections() if x.startswith("Colors:") or x == "WM"]:
+    sch.add_section(sec)
+    for k, v in cp.items(sec): sch.set(sec, k, v)
+sch.add_section("General"); sch.set("General", "Name", "Serpantinum"); sch.set("General", "ColorScheme", "Serpantinum")
+d = os.path.expanduser("~/.local/share/color-schemes"); os.makedirs(d, exist_ok=True)
+with open(d + "/Serpantinum.colors", "w", encoding="utf-8") as f: sch.write(f, space_around_delimiters=False)
 PY
 
 # 3) dolphinrc
