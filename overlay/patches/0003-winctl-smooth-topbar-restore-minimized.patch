@@ -1,0 +1,79 @@
+diff -ru a/quickshell/bar/BarModuleRegistry.qml b/quickshell/bar/BarModuleRegistry.qml
+--- a/quickshell/bar/BarModuleRegistry.qml	2026-10-18 18:45:45.925910792 +0500
++++ b/quickshell/bar/BarModuleRegistry.qml	2026-10-18 18:45:45.960345829 +0500
+@@ -70,6 +70,13 @@
+                 }
+             }
+         },
++        // Serpantinum: кнопки активного окна
++        "winctl": {
++            name: "Окно",
++            icon: "󰖲",
++            defaultVariant: "default",
++            face: "faces/winctl/WinCtlFace.qml"
++        },
+         "focus": {
+             name: typeof I18n !== "undefined" ? I18n.t("guide.bar.modules.focus", "Focus") : "Focus",
+             icon: "󰈈",
+diff -ru a/quickshell/bar/TopBar.qml b/quickshell/bar/TopBar.qml
+--- a/quickshell/bar/TopBar.qml	2026-10-18 18:45:45.931315609 +0500
++++ b/quickshell/bar/TopBar.qml	2026-10-18 18:45:45.960517205 +0500
+@@ -545,13 +545,14 @@
+         y: contentWrapper.hideOffsetY
+         Behavior on y {
+             enabled: barWindow ? !barWindow.positionChanging : true
+-            NumberAnimation { duration: 300; easing.type: Easing.OutQuint }
++            // Serpantinum: плавнее выезд/уход панели
++            NumberAnimation { duration: 420; easing.type: Easing.InOutCubic }
+         }
+     }
+ 
+     Behavior on opacity {
+         enabled: barWindow ? (!barWindow.positionChanging && barWindow.startupCascadeFinished) : true
+-        NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
++        NumberAnimation { duration: 380; easing.type: Easing.InOutQuad }
+     }
+ 
+     Rectangle {
+@@ -616,7 +617,7 @@
+ 
+         Behavior on opacity {
+             enabled: barWindow && !barWindow.positionChanging && barWindow.startupCascadeFinished && !contentWrapper.suppressAnimation
+-            NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
++            NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+         }
+     }
+ 
+@@ -638,7 +639,7 @@
+ 
+         Behavior on opacity {
+             enabled: barWindow && !barWindow.positionChanging && barWindow.startupCascadeFinished && !contentWrapper.suppressAnimation
+-            NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
++            NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+         }
+     }
+ 
+@@ -714,7 +715,7 @@
+ 
+             Behavior on opacity {
+                 enabled: barWindow && !barWindow.positionChanging && barWindow.startupCascadeFinished && !contentWrapper.suppressAnimation
+-                NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
++                NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+             }
+         }
+     }
+diff -ru a/quickshell/singletons/system/WindowTracker.qml b/quickshell/singletons/system/WindowTracker.qml
+--- a/quickshell/singletons/system/WindowTracker.qml	2026-10-18 18:45:45.939881935 +0500
++++ b/quickshell/singletons/system/WindowTracker.qml	2026-10-18 18:45:45.960589702 +0500
+@@ -438,6 +438,11 @@
+         let nid = (typeof win === "object") ? win.nativeId : win;
+         if (nid === undefined || nid === null || nid === "") return;
+         let addr = root._formatHyprAddress(nid);
++        // Serpantinum: свёрнутое окно (special:minimized) вернуть на текущий рабочий стол
++        if (typeof win === "object" && String(win.workspaceLabel || "").indexOf("special:minimized") === 0 && typeof Hyprland !== "undefined") {
++            let ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1;
++            Hyprland.dispatch("hl.dsp.window.move({ workspace = \"" + ws + "\", window = \"" + addr + "\" })");
++        }
+         if (typeof Hyprland !== "undefined") {
+             if (Hyprland.usingLua !== false) {
+                 Hyprland.dispatch("hl.dsp.focus({ window = \"" + addr + "\" })");

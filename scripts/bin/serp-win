@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# serp-win <min|max|close|restore> [монитор] — действия с окном для кнопок верхней панели.
+# Окно = последнее сфокусированное окно на активном рабочем столе указанного монитора
+# (если монитор не указан — активное окно). Данные берутся из hyprctl в момент нажатия.
+set -euo pipefail
+act="${1:-}"; mon="${2:-}"
+
+if [ -n "$mon" ]; then
+  ws=$(hyprctl monitors -j | jq -r --arg m "$mon" '.[] | select(.name == $m) | .activeWorkspace.id')
+  [ -n "$ws" ] || exit 1
+  addr=$(hyprctl clients -j | jq -r --argjson ws "$ws" \
+    '[.[] | select(.workspace.id == $ws and .mapped and (.hidden | not))] | sort_by(.focusHistoryID) | .[0].address // empty')
+else
+  addr=$(hyprctl activewindow -j | jq -r '.address // empty')
+fi
+[ -n "$addr" ] || exit 0
+w="address:$addr"
+
+case "$act" in
+  min)   hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })" ;;
+  max)   exec "$(dirname "$0")/serp-max" toggle "$addr" ;;   # развернуть как в Windows (окно остаётся плавающим)
+  close) hyprctl dispatch "hl.dsp.window.close({ window = \"$w\" })" ;;
+  *) echo "usage: serp-win min|max|close [monitor]" >&2; exit 2 ;;
+esac >/dev/null
