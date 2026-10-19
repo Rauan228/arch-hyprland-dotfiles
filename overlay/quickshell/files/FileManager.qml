@@ -113,11 +113,13 @@ Scope {
         } }
         onExited: { var idx = {}; for (var k in found) idx[k] = found[k].p; fm.iconIndex = idx; found = ({}); }
     }
+    // путь → file:// URL; пробелы, #, ? и т. п. обязательно кодировать, иначе QUrl понимает путь неверно
+    function fileUrl(p) { return "file://" + p.split("/").map(encodeURIComponent).join("/"); }
     function mimeIcon(name, isDir) {
         if (isDir) return "";
         var n = FT.iconName(name, false);
         var p = iconIndex[n] || iconIndex[n.split("-")[0] + "-x-generic"] || iconIndex["text-x-generic"] || iconIndex["unknown"];
-        return p ? "file://" + p : "";
+        return p ? fileUrl(p) : "";
     }
 
     // ---------- навигация ----------
@@ -148,7 +150,7 @@ Scope {
 
     FolderListModel {
         id: fsm
-        folder: fm.page === "folder" ? "file://" + fm.path : ""
+        folder: fm.page === "folder" ? fm.fileUrl(fm.path) : ""
         showDirsFirst: true
         showDotAndDotDot: false
         showHidden: fm.showHidden
@@ -275,7 +277,7 @@ Scope {
         if (r.isdir) go("folder", r.path);
         else Quickshell.execDetached(["gio", "open", r.path]);
     }
-    function uriList(paths) { return paths.map(function(p) { return "file://" + encodeURI(p); }).join("\n"); }
+    function uriList(paths) { return paths.map(function(p) { return fileUrl(p); }).join("\n"); }
     function setClip(mode) {
         if (!selPaths.length || page === "trash") return;
         clip = { mode: mode, paths: selPaths.slice() };
@@ -839,7 +841,7 @@ Scope {
                                 anchors.horizontalCenter: parent.horizontalCenter; y: 14; width: 80; height: 72
                                 fillMode: Image.PreserveAspectFit; asynchronous: true; smooth: true
                                 sourceSize: Qt.size(160, 144)
-                                source: tile.modelData.isdir ? "" : (FT.isImage(tile.modelData.name) ? "file://" + tile.modelData.path : fm.mimeIcon(tile.modelData.name, false))
+                                source: tile.modelData.isdir ? "" : (FT.isImage(tile.modelData.name) ? fm.fileUrl(tile.modelData.path) : fm.mimeIcon(tile.modelData.name, false))
                             }
                             Text { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 8 } height: 36
                                    text: tile.modelData.name; color: fm.textMain; font { family: fm.font; pixelSize: 12 }
@@ -909,7 +911,7 @@ Scope {
                                 visible: !details.isdir && FT.isImage(details.dname) && status === Image.Ready
                                 fillMode: Image.PreserveAspectFit; asynchronous: true; smooth: true
                                 sourceSize: Qt.size(560, 320)
-                                source: !details.isdir && FT.isImage(details.dname) ? "file://" + details.dpath : ""
+                                source: !details.isdir && FT.isImage(details.dname) ? fm.fileUrl(details.dpath) : ""
                             }
                         }
                         Column {
