@@ -66,4 +66,5 @@ hl.window_rule({
     name  = "telegram-no-focus-steal",
     match = { class = "^org\\.telegram\\.desktop$" },
     suppress_event = "activatefocus",
+    focus_on_activate = false,   -- просьба «активировать окно» от Telegram фокус не забирает
 })
