@@ -22,9 +22,13 @@ hl.animation({ leaf = "layersIn",      enabled = true,  speed = 4,    bezier = "
 hl.animation({ leaf = "layersOut",     enabled = true,  speed = 1.5,  bezier = "linear",       style = "fade" })
 hl.animation({ leaf = "fadeLayersIn",  enabled = true,  speed = 1.79, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeLayersOut", enabled = true,  speed = 1.39, bezier = "almostLinear" })
-hl.animation({ leaf = "workspaces",    enabled = true,  speed = 1.94, bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 1.21, bezier = "almostLinear", style = "fade" })
-hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 1.94, bezier = "almostLinear", style = "fade" })
+-- рабочие столы как в Windows: весь стол уезжает в сторону, новый въезжает (следующий — справа), ~0,3 с
+hl.curve("deskSlide", { type = "bezier", points = { {0.22, 0.9}, {0.25, 1} } })
+hl.animation({ leaf = "workspaces",    enabled = true,  speed = 3,    bezier = "deskSlide",    style = "slide" })
+hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 3,    bezier = "deskSlide",    style = "slide" })
+hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 3,    bezier = "deskSlide",    style = "slide" })
+-- скрытый стол свёрнутых окон (special:minimized) открывается/закрывается мгновенно и незаметно
+hl.animation({ leaf = "specialWorkspace", enabled = false })
 hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 7,    bezier = "quick" })
 
 -- Свернуть / вернуть окно (scripts/bin/serp-win): окно «засасывается» в док с ускорением и вылетает обратно.
