@@ -59,3 +59,11 @@ hl.layer_rule({
     blur  = true,
     ignore_alpha = 0.05,
 })
+
+-- Telegram не выскакивает и не забирает фокус, когда приходит сообщение (как в Windows: окно само
+-- на передний план не лезет). Открыть — кликом в доке, Alt+Tab или по окну.
+hl.window_rule({
+    name  = "telegram-no-focus-steal",
+    match = { class = "^org\\.telegram\\.desktop$" },
+    suppress_event = "activatefocus",
+})
