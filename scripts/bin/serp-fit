@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# serp-fit — вернуть плавающие окна в пределы своего монитора:
+#   окно больше экрана — уменьшить; заголовок ушёл за верхний край — опустить; окно почти целиком
+#   за левым/правым/нижним краем — вернуть так, чтобы было за что схватить.
+# Запускается оболочкой при событиях окон (и раз в несколько секунд), можно вызвать вручную.
+set -u
+BAR=32      # высота заголовка (hyprbars), он рисуется над окном
+GAP=8
+KEEP=160    # сколько окна должно оставаться видно по горизонтали
+
+# сначала «развёрнутые» окна: перетаскивание из развёрнутого состояния и режим maximized программ
+"$(dirname "$(readlink -f "$0")")/serp-max" check
+
+# развёрнутые окна (serp-max) занимают весь экран намеренно — их не трогаем
+maxed=$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed" 2>/dev/null | jq -R . | jq -s -c .)
+
+hyprctl clients -j | jq -r --argjson mons "$(hyprctl monitors -j)" --argjson bar $BAR --argjson gap $GAP --argjson keep $KEEP --argjson maxed "${maxed:-[]}" '
+  ($mons | map({ key: (.id | tostring), value: . }) | from_entries) as $m
+  | .[]
+  | select(.floating and .fullscreen == 0 and .mapped and .workspace.id > 0)
+  | select(.address as $a | $maxed | index($a) | not)
+  | ($m[(.monitor | tostring)]) as $mo
+  | select($mo != null)
+  | ($mo.x) as $mx | ($mo.y) as $my
+  | (($mo.width / $mo.scale) | floor) as $lw | (($mo.height / $mo.scale) | floor) as $lh
+  | ($mo.reserved[1]) as $rt | ($mo.reserved[3]) as $rb
+  | ([.size[0], $lw - 2 * $gap] | min) as $w
+  | ([.size[1], $lh - $rt - $rb - $bar - 2 * $gap] | min) as $h
+  | ([[.at[0], $mx - $w + $keep] | max, $mx + $lw - $keep] | min) as $x
+  | ([[.at[1], $my + $rt + $bar + $gap] | max, $my + $lh - $rb - 60] | min) as $y
+  | select($w != .size[0] or $h != .size[1] or $x != .at[0] or $y != .at[1])
+  | "\(.address) \($w) \($h) \($x) \($y) \(.size[0]) \(.size[1])"
+' | while read -r a w h x y ow oh; do
+  if [ "$w" != "$ow" ] || [ "$h" != "$oh" ]; then
+    hyprctl dispatch "hl.dsp.window.resize({ x = $w, y = $h, window = \"address:$a\" })" >/dev/null
+  fi
+  hyprctl dispatch "hl.dsp.window.move({ x = $x, y = $y, window = \"address:$a\" })" >/dev/null
+done
+
+# запомнить размеры и места окон по программам (не чаще раза в 3 с)
+store="${XDG_STATE_HOME:-$HOME/.local/state}/serpantinum/geometry.json"
+if [ $(( $(date +%s) - $(stat -c %Y "$store" 2>/dev/null || echo 0) )) -ge 3 ]; then
+  "$(dirname "$(readlink -f "$0")")/serp-geom" save
+fi
