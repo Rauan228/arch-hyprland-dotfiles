@@ -65,20 +65,15 @@ diff -ru a/quickshell/bar/TopBar.qml b/quickshell/bar/TopBar.qml
 diff -ru a/quickshell/singletons/system/WindowTracker.qml b/quickshell/singletons/system/WindowTracker.qml
 --- a/quickshell/singletons/system/WindowTracker.qml	2026-10-18 18:45:45.939881935 +0500
 +++ b/quickshell/singletons/system/WindowTracker.qml	2026-10-18 18:45:45.960589702 +0500
-@@ -438,6 +438,18 @@
+@@ -438,6 +438,13 @@
          let nid = (typeof win === "object") ? win.nativeId : win;
          if (nid === undefined || nid === null || nid === "") return;
          let addr = root._formatHyprAddress(nid);
-+        // Serpantinum: свёрнутое окно (special:minimized) вернуть туда же, откуда свернули (scripts/bin/serp-win)
-+        if (typeof win === "object" && String(win.workspaceLabel || "").indexOf("special:minimized") === 0) {
-+            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "restore", addr]);
-+            return;
-+        }
-+        // Serpantinum: обычное окно — фокус И поверх остальных: окна плавающие, и одного фокуса мало —
-+        // окно, лежащее под другим, оставалось невидимым (клик по доку «не открывал» его)
-+        if (typeof Hyprland !== "undefined" && Hyprland.usingLua !== false) {
-+            Hyprland.dispatch("hl.dsp.focus({ window = \"" + addr + "\" })");
-+            Hyprland.dispatch("hl.dsp.window.alter_zorder({ mode = \"top\", window = \"" + addr + "\" })");
++        // Serpantinum: открыть окно как в панели задач Windows (scripts/bin/serp-win focus): свёрнутое — развернуть,
++        // на другом рабочем столе — переключить стол на всех мониторах, затем фокус и поверх остальных
++        // (одного фокуса мало: окна плавающие, окно под другим оставалось невидимым)
++        if (typeof Hyprland !== "undefined") {
++            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "focus", addr]);
 +            return;
 +        }
          if (typeof Hyprland !== "undefined") {

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# serp-win <min|restore|max|close|special> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
+# serp-win <min|restore|focus|max|close|special> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
 # Окно: 0xADDR — это окно; имя монитора — последнее сфокусированное окно на его рабочем столе; иначе — активное.
 #   min      свернуть как в Windows: окно уходит в скрытый special:minimized, запоминается, с какого
 #            рабочего стола оно ушло, а фокус переходит на следующее окно под ним (а не остаётся на невидимом)
 #   restore  вернуть свёрнутое туда же, откуда свернули (тот же стол и место), поверх остальных и с фокусом
+#   focus    открыть окно как кликом по панели задач Windows: свёрнутое — развернуть, на другом рабочем столе —
+#            сначала переключить стол целиком (на всех мониторах, serp-desk), затем фокус и поверх остальных
 set -euo pipefail
 act="${1:-}"; arg="${2:-}"; arg="${arg#address:}"   # принимаем и 0xADDR, и address:0xADDR
 state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"; mkdir -p "$state"
@@ -58,6 +60,14 @@ slide() {  # addr x y [opacity] — только сдвиг (и прозрачн
   hyprctl --batch "$b" >/dev/null
 }
 
+# рабочий стол = номер рабочего пространства % 100 (на каждом мониторе своё: 1, 101, 201… — scripts/bin/serp-desk)
+cur_desk() { local id; id=$(hyprctl activeworkspace -j | jq -r '.id'); [ "$id" -gt 0 ] 2>/dev/null && echo $(( id % 100 )) || echo 1; }
+goto_desk() {   # переключить стол на всех мониторах сразу, если окно не на текущем (иначе мониторы «расходятся»)
+  local n=$(( $1 % 100 ))
+  [ "$1" -gt 0 ] 2>/dev/null && [ "$n" -ge 1 ] && [ "$n" != "$(cur_desk)" ] && "$(dirname "$0")/serp-desk" go "$n"
+  return 0
+}
+
 minimize() {
   local ws x y ww hh mon op mx my mw mh tw th tx ty next
   read -r ws x y ww hh mon < <(jq -r --arg a "$addr" '.[] | select(.address == $a) | "\(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.monitor)"' <<<"$clients")
@@ -93,6 +103,8 @@ minimize() {
 restore() {
   local ws="" x="" y="" ww="" hh="" op="" tx="" ty="" tw="" th="" mx
   read -r ws x y ww hh op tx ty tw th < "$state/$addr" 2>/dev/null || true
+  # окно свернули на другом рабочем столе — сначала переключить стол целиком (все мониторы)
+  [ -n "$ws" ] && goto_desk "$ws"
   # стол, с которого свернули, — если он ещё есть; иначе текущий
   if [ -z "$ws" ] || ! hyprctl workspaces -j | jq -e --argjson ws "$ws" 'any(.[]; .id == $ws)' >/dev/null; then
     ws=$(hyprctl activeworkspace -j | jq -r '.id')
@@ -125,10 +137,21 @@ restore() {
   rm -f "$state/$addr"
 }
 
+focus_win() {
+  local ws
+  ws=$(jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.id' <<<"$clients")
+  [ -n "$ws" ] || return 0
+  if [ "$ws" -lt 0 ]; then restore; return; fi                   # свёрнуто — развернуть
+  goto_desk "$ws"
+  d "hl.dsp.focus({ window = \"$w\" })"
+  d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
+}
+
 case "$act" in
   min)     minimize ;;
   restore) restore ;;
+  focus)   focus_win ;;
   max)     exec "$(dirname "$0")/serp-max" toggle "$addr" ;;     # развернуть как в Windows (окно остаётся плавающим)
   close)   d "hl.dsp.window.close({ window = \"$w\" })" ;;
-  *) echo "usage: serp-win min|restore|max|close [monitor|0xADDR]" >&2; exit 2 ;;
+  *) echo "usage: serp-win min|restore|focus|max|close [monitor|0xADDR]" >&2; exit 2 ;;
 esac
