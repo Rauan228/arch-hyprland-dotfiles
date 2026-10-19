@@ -1,0 +1,8 @@
+singleton Style 1.0 Style.qml
+TaskManager 1.0 TaskManager.qml
+DataTable 1.0 DataTable.qml
+PerfView 1.0 PerfView.qml
+Graph 1.0 Graph.qml
+Icon 1.0 Icon.qml
+StatCard 1.0 StatCard.qml
+SettingsView 1.0 SettingsView.qml
