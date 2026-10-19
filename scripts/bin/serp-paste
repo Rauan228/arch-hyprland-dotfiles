@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# serp-paste — вставить содержимое буфера в активное окно (как Win+V в Windows).
+# В терминалах вставка — Ctrl+Shift+V, в остальных программах — Ctrl+V.
+# Клавиша передаётся физическим кодом (code:55 = V), чтобы работало и в русской раскладке.
+sleep "${1:-0.25}"
+read -r addr cls < <(hyprctl activewindow -j | jq -r '"\(.address // "") \(.class // "")"')
+[ -n "$addr" ] && [ "$addr" != "null" ] || exit 0
+case "${cls,,}" in
+  kitty|serp-info|*terminal*|foot|alacritty|wezterm*|org.wezfurlong.wezterm|konsole|org.kde.konsole) mods="CTRL SHIFT" ;;
+  *) mods="CTRL" ;;
+esac
+hyprctl dispatch "hl.dsp.send_shortcut({ mods = \"$mods\", key = \"code:55\", window = \"address:$addr\" })" >/dev/null

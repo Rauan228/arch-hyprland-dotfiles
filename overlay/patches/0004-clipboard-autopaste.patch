@@ -1,0 +1,20 @@
+diff -ru a/quickshell/clipboard/Clipboard.qml b/quickshell/clipboard/Clipboard.qml
+--- a/quickshell/clipboard/Clipboard.qml	2026-10-18 20:13:05.695727469 +0500
++++ b/quickshell/clipboard/Clipboard.qml	2026-10-18 20:13:05.708429866 +0500
+@@ -384,12 +384,14 @@
+         clipFetcherProc.running = true;
+     }
+ 
++    // Serpantinum patch: как Win+V в Windows — выбранная запись сразу вставляется в активное окно
++    readonly property string serpPaste: Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-paste"
+     function copyClip(id, isPinned) {
+         if (typeof Sounds !== "undefined") Sounds.playSfx("system/quick_click.wav");
+         if (isPinned) {
+-            Quickshell.execDetached(["bash", "-c", "cliphist decode " + id + " | wl-copy && (sleep 0.15; NEW_ID=$(cliphist list | head -n 1 | awk '{print $1}'); python3 " + Caching.qsDir + "/clipboard/clip_fetcher.py pin $NEW_ID " + Caching.getCacheDir("clipboard") + ") &"]);
++            Quickshell.execDetached(["bash", "-c", "cliphist decode " + id + " | wl-copy && { \"" + serpPaste + "\" & } && (sleep 0.15; NEW_ID=$(cliphist list | head -n 1 | awk '{print $1}'); python3 " + Caching.qsDir + "/clipboard/clip_fetcher.py pin $NEW_ID " + Caching.getCacheDir("clipboard") + ") &"]);
+         } else {
+-            Quickshell.execDetached(["bash", "-c", "cliphist decode " + id + " | wl-copy"]);
++            Quickshell.execDetached(["bash", "-c", "cliphist decode " + id + " | wl-copy && exec \"" + serpPaste + "\""]);
+         }
+         closeClipboard();
+     }
