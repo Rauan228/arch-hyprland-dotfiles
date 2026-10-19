@@ -1,6 +1,6 @@
 local mainMod     = "SUPER"
 local terminal    = "kitty"
-local fileManager = "dolphin"   -- проводник: Dolphin в оформлении Serpantinum (scripts/setup-filemanager.sh)
+local fileManager = "env QT_QPA_PLATFORMTHEME=qt6ct dolphin"   -- проводник: Dolphin в оформлении Serpantinum (scripts/setup-filemanager.sh)
 local serp        = "$HOME/.config/serpantinum/bin/serp"
 local menu        = serp .. " toggle launcher" -- меню приложений (оригинальный лаунчер Serpantinum)
 
