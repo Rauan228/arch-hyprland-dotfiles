@@ -12,7 +12,8 @@ KEEP=160    # сколько окна должно оставаться видн
 "$(dirname "$(readlink -f "$0")")/serp-max" check
 
 # развёрнутые окна (serp-max) занимают весь экран намеренно — их не трогаем
-maxed=$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed" 2>/dev/null | jq -R . | jq -s -c .)
+# …и сворачиваемые/свёрнутые (serp-win): во время «засасывания» в док окно намеренно крошечное
+maxed=$(ls "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed" "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized" 2>/dev/null | grep '^0x' | jq -R . | jq -s -c .)
 
 hyprctl clients -j | jq -r --argjson mons "$(hyprctl monitors -j)" --argjson bar $BAR --argjson gap $GAP --argjson keep $KEEP --argjson maxed "${maxed:-[]}" '
   ($mons | map({ key: (.id | tostring), value: . }) | from_entries) as $m

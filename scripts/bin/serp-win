@@ -40,13 +40,37 @@ esac
 [ -n "$addr" ] || exit 0
 w="address:$addr"
 
+# анимация «засасывания» в док: на время свернуть/вернуть движение и прозрачность окна идут по своим кривым
+# (serpMinIn/serpMinOut из hypr/modules/animations.lua), потом возвращаются обычные — как в animations.lua
+ANIM=0.36
+anim() {   # in | out | off | default
+  case "$1" in
+    in|out) local c=serpMin${1^}
+            hyprctl --batch "eval hl.animation({ leaf = 'windowsMove', enabled = true, speed = 3.5, bezier = '$c' }) ; eval hl.animation({ leaf = 'fadeSwitch', enabled = true, speed = 3.5, bezier = '$c' })" >/dev/null ;;
+    off)    hyprctl --batch "eval hl.animation({ leaf = 'windowsMove', enabled = false }) ; eval hl.animation({ leaf = 'fadeSwitch', enabled = false })" >/dev/null ;;
+    default) hyprctl --batch "eval hl.animation({ leaf = 'windowsMove', enabled = true, speed = 4.79, spring = 'easy' }) ; eval hl.animation({ leaf = 'fadeSwitch', enabled = true, speed = 3.03, bezier = 'quick' })" >/dev/null ;;
+  esac
+}
+geom() {   # addr x y w h [opacity]
+  local b="dispatch hl.dsp.window.resize({ x = $4, y = $5, window = \"address:$1\" }) ; dispatch hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" })"
+  [ -n "${6:-}" ] && b="$b ; dispatch hl.dsp.window.set_prop({ prop = \"opacity\", value = \"$6\", window = \"address:$1\" })"
+  hyprctl --batch "$b" >/dev/null
+}
+
 minimize() {
-  local ws x y ww hh next
-  read -r ws x y ww hh < <(jq -r --arg a "$addr" '.[] | select(.address == $a) | "\(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' <<<"$clients")
+  local ws x y ww hh mon op mx my mw mh tw th tx ty next
+  read -r ws x y ww hh mon < <(jq -r --arg a "$addr" '.[] | select(.address == $a) | "\(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.monitor)"' <<<"$clients")
   [ -n "${ws:-}" ] || return 0
   [ "$ws" -lt 0 ] && return 0                                    # уже свёрнуто
-  echo "$ws $x $y $ww $hh" > "$state/$addr"
+  op=$(hyprctl getprop "$w" opacity -j 2>/dev/null | jq -r '.opacity // 1' 2>/dev/null); op=${op:-1}
+  # куда «засасывать»: док — середина нижнего края монитора окна
+  read -r mx my mw mh < <(hyprctl monitors -j | jq -r --argjson m "$mon" '.[] | select(.id == $m) | "\(.x) \(.y) \((.width / .scale) | floor) \((.height / .scale) | floor)"')
+  tw=$(( ww / 8 > 48 ? ww / 8 : 48 )); th=$(( hh / 8 > 32 ? hh / 8 : 32 ))
+  tx=$(( mx + mw / 2 - tw / 2 )); ty=$(( my + mh - th - 6 ))
+  echo "$ws $x $y $ww $hh $op $tx $ty $tw $th" > "$state/$addr"
+  anim in; geom "$addr" "$tx" "$ty" "$tw" "$th" 0; sleep "$ANIM"
   d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
+  anim default
   # фокус — следующему окну на том же столе (по истории фокуса), как в Windows
   next=$(jq -r --arg a "$addr" --argjson ws "$ws" '[.[] | select(.address != $a and .workspace.id == $ws and .mapped and (.hidden | not))]
                                                    | sort_by(.focusHistoryID) | .[0].address // empty' <<<"$clients")
@@ -58,24 +82,33 @@ minimize() {
 }
 
 restore() {
-  local ws="" x="" y="" ww="" hh="" mx
-  read -r ws x y ww hh < "$state/$addr" 2>/dev/null || true
+  local ws="" x="" y="" ww="" hh="" op="" tx="" ty="" tw="" th="" mx
+  read -r ws x y ww hh op tx ty tw th < "$state/$addr" 2>/dev/null || true
   # стол, с которого свернули, — если он ещё есть; иначе текущий
   if [ -z "$ws" ] || ! hyprctl workspaces -j | jq -e --argjson ws "$ws" 'any(.[]; .id == $ws)' >/dev/null; then
     ws=$(hyprctl activeworkspace -j | jq -r '.id')
   fi
-  d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
-  # ровно на то место и в тот размер, что были в момент сворачивания (при переносе между столами
-  # Hyprland окно сдвигает); развёрнутому обновляем отметку, чтобы serp-maxwatch не принял перенос за перетаскивание
+  # развёрнутому обновляем отметку, чтобы serp-maxwatch не принял возврат за перетаскивание
   mx="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed/$addr"
   [ -f "$mx" ] && touch "$mx"
-  if [ -n "$x" ]; then
-    d "hl.dsp.window.resize({ x = $ww, y = $hh, window = \"$w\" })"
-    d "hl.dsp.window.move({ x = $x, y = $y, window = \"$w\" })"
+  if [ -n "$tx" ]; then
+    # мгновенно поставить крошечным и прозрачным у дока, затем «вылететь» на прежнее место и в прежний размер
+    anim off
+    d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
+    geom "$addr" "$tx" "$ty" "$tw" "$th" 0
+    d "hl.dsp.focus({ window = \"$w\" })"
+    d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
+    sleep 0.03
+    anim out; geom "$addr" "$x" "$y" "$ww" "$hh" "${op:-1}"; sleep "$ANIM"
+    anim default
+  else
+    # свёрнуто до этой версии (без записи) — просто вернуть
+    d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
+    [ -n "$x" ] && geom "$addr" "$x" "$y" "$ww" "$hh"
+    d "hl.dsp.focus({ window = \"$w\" })"
+    d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
   fi
   rm -f "$state/$addr"
-  d "hl.dsp.focus({ window = \"$w\" })"
-  d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
 }
 
 case "$act" in

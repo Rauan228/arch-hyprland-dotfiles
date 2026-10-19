@@ -26,3 +26,8 @@ hl.animation({ leaf = "workspaces",    enabled = true,  speed = 1.94, bezier = "
 hl.animation({ leaf = "workspacesIn",  enabled = true,  speed = 1.21, bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "workspacesOut", enabled = true,  speed = 1.94, bezier = "almostLinear", style = "fade" })
 hl.animation({ leaf = "zoomFactor",    enabled = true,  speed = 7,    bezier = "quick" })
+
+-- Свернуть / вернуть окно (scripts/bin/serp-win): окно «засасывается» в док с ускорением и вылетает обратно.
+-- serp-win на время анимации ставит эти кривые для windowsMove через hyprctl eval, потом возвращает обычные.
+hl.curve("serpMinIn",  { type = "bezier", points = { {0.55, 0}, {0.85, 0.35} } })  -- разгон к доку
+hl.curve("serpMinOut", { type = "bezier", points = { {0.15, 0.7}, {0.3, 1} } })    -- вылет из дока с торможением
