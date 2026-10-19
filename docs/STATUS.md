@@ -4,7 +4,7 @@
 два монитора: ноутбук eDP-1 и Xiaomi 27" HDMI-A-1. Windows 11 на отдельном SSD.
 
 ## Устройство проекта
-Исходники — `~/Projects/Serpantinum` (git, коммитов пока нет). В систему попадают через symlink'и и скрипты.
+Исходники — `~/Projects/Serpantinum` (git, https://github.com/Rauan228/arch-hyprland-dotfiles). В систему попадают через symlink'и и скрипты.
 
 | Папка | Что внутри |
 |---|---|
