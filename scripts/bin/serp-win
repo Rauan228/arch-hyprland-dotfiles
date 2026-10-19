@@ -46,12 +46,10 @@ restore() {
     ws=$(hyprctl activeworkspace -j | jq -r '.id')
   fi
   d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
-  # ровно на прежнее место (при переносе между столами Hyprland окно сдвигает);
-  # развёрнутое (serp-max) — снова на всю рабочую область
+  # ровно на то место и в тот размер, что были в момент сворачивания (при переносе между столами
+  # Hyprland окно сдвигает); развёрнутому обновляем отметку, чтобы serp-maxwatch не принял перенос за перетаскивание
   mx="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed/$addr"
-  if [ -f "$mx" ]; then
-    touch "$mx"; read -r _ _ _ _ x y ww hh < "$mx"
-  fi
+  [ -f "$mx" ] && touch "$mx"
   if [ -n "$x" ]; then
     d "hl.dsp.window.resize({ x = $ww, y = $hh, window = \"$w\" })"
     d "hl.dsp.window.move({ x = $x, y = $y, window = \"$w\" })"
