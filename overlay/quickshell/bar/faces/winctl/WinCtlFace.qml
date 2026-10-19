@@ -1,4 +1,4 @@
-// Serpantinum: кнопки активного окна «свернуть / развернуть / закрыть» для верхней панели.
+// Serpantinum: кнопки «свернуть / развернуть / закрыть» верхней панели — для выбранного окна (голубая рамка).
 // Свернуть = перенос в скрытый special:minimized (вернуть — клик по приложению в доке).
 import QtQuick
 import Quickshell
@@ -12,23 +12,20 @@ Item {
     readonly property var barWindow: module ? module.barWindow : null
     readonly property bool isVertical: module ? module.orientation === "vertical" : false
 
-    // окно этого монитора: активное, если фокус здесь, иначе последнее сфокусированное на его рабочем столе
-    readonly property var mon: barWindow && barWindow.screen ? Hyprland.monitorFor(barWindow.screen) : null
-    readonly property var win: {
+    // окно, с которым сейчас работаешь (выделено голубой рамкой), — на любом мониторе.
+    // Запоминаем последнее такое окно: клик по самой панели или свёрнутое окно не сбивают выбор.
+    property var win: null
+    function pickActive() {
         let a = Hyprland.activeToplevel;
-        if (!mon) return a;
-        if (a && a.monitor && a.monitor.name === mon.name) return a;
-        let ws = mon.activeWorkspace;
-        if (!ws) return null;
-        let best = null, bestH = 1e9;
-        let list = Hyprland.toplevels.values;
-        for (let i = 0; i < list.length; i++) {
-            let t = list[i];
-            if (!t || !t.workspace || t.workspace.id !== ws.id) continue;
-            let h = (t.lastIpcObject && t.lastIpcObject.focusHistoryID !== undefined) ? t.lastIpcObject.focusHistoryID : 1e8;
-            if (h < bestH) { bestH = h; best = t; }
-        }
-        return best;
+        if (!a || !a.address) return;
+        let ws = a.workspace ? String(a.workspace.name || "") : "";
+        if (ws.indexOf("special:") === 0) return;
+        win = a;
+    }
+    Component.onCompleted: pickActive()
+    Connections {
+        target: Hyprland
+        function onActiveToplevelChanged() { root.pickActive() }
     }
     readonly property var ipc: win ? win.lastIpcObject : null
     readonly property string addr: win && win.address ? (String(win.address).startsWith("0x") ? String(win.address) : "0x" + win.address) : ""
@@ -36,10 +33,11 @@ Item {
     readonly property bool isFaceVisible: addr !== ""
 
     function c(v) { return barWindow ? barWindow.cs(v) : v }
-    // действие выполняет serp-win: окно определяется через hyprctl в момент нажатия
+    // действие выполняет serp-win — именно с выбранным окном (по адресу)
     function act(what) {
-        let m = barWindow && barWindow.screen ? barWindow.screen.name : "";
-        Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", what, m]);
+        if (!addr) return;
+        Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", what, addr]);
+        if (what === "close" || what === "min") win = null;
         refreshTimer.restart();
     }
     Timer { id: refreshTimer; interval: 120; onTriggered: Hyprland.refreshToplevels() }
