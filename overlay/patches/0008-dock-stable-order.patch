@@ -1,0 +1,31 @@
+--- a/quickshell/dock/DockWindowApps.qml	2026-10-19 12:14:30.399426944 +0500
++++ b/quickshell/dock/DockWindowApps.qml	2026-10-19 12:14:30.412491652 +0500
+@@ -251,21 +251,20 @@
+             }
+         }
+ 
++        // Serpantinum: как на панели задач Windows — значки запущенных программ стоят на своих местах,
++        // новая программа добавляется в конец. Раньше порядок пересобирался из словаря групп окон, который
++        // меняется при каждом сворачивании/фокусе, и значки «убегали» из-под курсора.
+         for (let c = 0; c < candidates.length; c++) {
+             let cand = candidates[c];
+-            let idx = -1;
+-            for (let r = c; r < runningAppsModel.count; r++) {
++            let found = false;
++            for (let r = 0; r < runningAppsModel.count; r++) {
+                 let rItem = runningAppsModel.get(r);
+                 if (rItem && (rItem.canonical_id === cand.canonical_id || rItem.desktop_id === cand.desktop_id)) {
+-                    idx = r;
++                    found = true;
+                     break;
+                 }
+             }
+-            if (idx === -1) {
+-                runningAppsModel.insert(c, cand);
+-            } else if (idx !== c) {
+-                runningAppsModel.move(idx, c, 1);
+-            }
++            if (!found) runningAppsModel.append(cand);
+         }
+     }
+ 
