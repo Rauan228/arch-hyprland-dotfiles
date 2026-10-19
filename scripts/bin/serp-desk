@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# serp-desk — виртуальные рабочие столы как в Windows.
+# Стол N = рабочее пространство N на ноутбуке (eDP-1) + 100+N на HDMI-A-1 (+200+N DP-1, +300+N DP-2).
+#   go N | next | prev | new | close [N] | move N [ADDR] | carry next|prev | current | list (JSON)
+set -u
+state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum"; mkdir -p "$state"
+countf="$state/desktops"
+main="$HOME/.local/share/serpantinum/runtime/quickshell/Shell.qml"
+
+base() { case "$1" in eDP-1) echo 0 ;; HDMI-A-1) echo 100 ;; DP-1) echo 200 ;; DP-2) echo 300 ;; *) echo 400 ;; esac; }
+d() { hyprctl dispatch "$1" >/dev/null; }
+
+cur() {
+  local id; id=$(hyprctl activeworkspace -j | jq -r '.id')
+  [ "$id" -gt 0 ] 2>/dev/null && echo $(( id % 100 )) || echo 1
+}
+maxused() { hyprctl workspaces -j | jq '[.[] | select(.id > 0 and .windows > 0) | .id % 100] | max // 1'; }
+count() {
+  local c=1 m u; [ -f "$countf" ] && c=$(cat "$countf")
+  m=$(maxused); u=$(cur)
+  [ "$m" -gt "$c" ] && c=$m; [ "$u" -gt "$c" ] && c=$u
+  echo "$c"
+}
+setcount() { echo "$1" > "$countf"; }
+indicator() { (quickshell -p "$main" ipc call switcher desk >/dev/null 2>&1 &); }
+
+go() {
+  local n=$1 fm m
+  [ "$n" -ge 1 ] || return
+  fm=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+  # сначала остальные мониторы, в конце — тот, где фокус (фокус остаётся на нём)
+  for m in $(hyprctl monitors -j | jq -r '.[] | select(.focused | not) | .name') "$fm"; do
+    d "hl.dsp.focus({ workspace = \"$(( $(base "$m") + n ))\" })"
+  done
+  [ "$n" -gt "$(count)" ] && setcount "$n"
+  indicator
+}
+
+# перенести все окна стола $1 на стол $2 (каждое остаётся на своём мониторе)
+shift_desk() {
+  local from=$1 to=$2
+  hyprctl clients -j | jq -r --argjson f "$from" '.[] | select(.workspace.id > 0 and (.workspace.id % 100) == $f) | "\(.address) \(.workspace.id)"' |
+  while read -r a id; do
+    d "hl.dsp.window.move({ workspace = \"$(( id - from + to ))\", window = \"address:$a\", silent = true })"
+  done
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  go)      go "${2:-1}" ;;
+  next)    c=$(cur); [ "$c" -lt "$(count)" ] && go $(( c + 1 )) ;;
+  prev)    c=$(cur); [ "$c" -gt 1 ] && go $(( c - 1 )) ;;
+  new)     n=$(( $(count) + 1 )); setcount "$n"; go "$n" ;;
+  close)
+    n=$(count); c="${2:-$(cur)}"
+    [ "$n" -gt 1 ] || exit 0
+    if [ "$c" -gt 1 ]; then shift_desk "$c" $(( c - 1 )); else shift_desk 1 2; fi
+    # сдвинуть столы правее на один влево
+    for (( i = (c == 1 ? 2 : c + 1); i <= n; i++ )); do shift_desk "$i" $(( i - 1 )); done
+    setcount $(( n - 1 ))
+    t=$(( c > 1 ? c - 1 : 1 )); go "$t" ;;
+  move)
+    n="${2:-1}"; a="${3:-$(hyprctl activewindow -j | jq -r '.address // empty')}"
+    [ -n "$a" ] || exit 0
+    mon=$(hyprctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | .monitor')
+    name=$(hyprctl monitors -j | jq -r --argjson id "${mon:-0}" '.[] | select(.id == $id) | .name')
+    d "hl.dsp.window.move({ workspace = \"$(( $(base "$name") + n ))\", window = \"address:$a\", silent = true })"
+    [ "$n" -gt "$(count)" ] && setcount "$n" ;;
+  carry)
+    c=$(cur); a=$(hyprctl activewindow -j | jq -r '.address // empty'); [ -n "$a" ] || exit 0
+    if [ "${2:-next}" = next ]; then t=$(( c + 1 )); else t=$(( c - 1 )); fi
+    [ "$t" -ge 1 ] || exit 0
+    "$0" move "$t" "$a"; go "$t"; d "hl.dsp.focus({ window = \"address:$a\" })" ;;
+  current) cur ;;
+  list)
+    n=$(count); c=$(cur)
+    hyprctl clients -j | jq -c --argjson n "$n" --argjson c "$c" '
+      [ .[] | select(.workspace.id > 0) | {address, class, title, monitor, d: (.workspace.id % 100)} ] as $w
+      | { count: $n, current: $c,
+          desktops: [ range(1; $n + 1) as $i | { n: $i, windows: [ $w[] | select(.d == $i) | del(.d) ] } ] }' ;;
+  *) echo "usage: serp-desk go N|next|prev|new|close [N]|move N [ADDR]|carry next|prev|current|list" >&2; exit 2 ;;
+esac

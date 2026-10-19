@@ -1,0 +1,65 @@
+diff -ru a/quickshell/bar/faces/workspaces/WorkspacesFace.qml b/quickshell/bar/faces/workspaces/WorkspacesFace.qml
+--- a/quickshell/bar/faces/workspaces/WorkspacesFace.qml	2026-10-18 21:05:11.204789451 +0500
++++ b/quickshell/bar/faces/workspaces/WorkspacesFace.qml	2026-10-18 21:05:11.219332594 +0500
+@@ -90,7 +90,28 @@
+         return 8;
+     }
+ 
++    // Serpantinum patch: на Hyprland кружки — это рабочие столы Serpantinum (scripts/bin/serp-desk):
++    // стол N = рабочее пространство N на ноутбуке + 100+N на HDMI, переключаются вместе.
++    readonly property bool serpDesks: !isNiri && !isSway && !isMango
++    property int serpDeskFile: 1
++    FileView {
++        path: (Quickshell.env("XDG_RUNTIME_DIR") || "/run/user/1000") + "/serpantinum/desktops"
++        watchChanges: true; printErrors: false
++        onFileChanged: reload()
++        onLoaded: root.serpDeskFile = Math.max(1, parseInt(text()) || 1)
++    }
++    function serpMaxDesk() {
++        let m = 1;
++        let ws = Hyprland.workspaces.values;
++        for (let i = 0; i < ws.length; i++) {
++            let w = ws[i];
++            if (w.id > 0 && w.toplevels && w.toplevels.values && w.toplevels.values.length > 0) m = Math.max(m, w.id % 100);
++        }
++        return m;
++    }
++
+     property int workspaceCount: {
++        if (serpDesks) return Math.max(activeIndex + 1, serpMaxDesk(), serpDeskFile, 1);
+         let base = baseWorkspaceCount;
+         let act = activeIndex;
+         let count = base;
+@@ -173,6 +194,14 @@
+         if (isNiri) return !!(niriExistingMap[index] && niriOccupiedMap[index]);
+         if (isSway) return !!swayOccupiedMap[index];
+         if (isMango) return !!(mangoOccupiedMap && MangoState.isOccupied(myOutput, index));
++        if (serpDesks) {
++            let all = Hyprland.workspaces.values;
++            for (let i = 0; i < all.length; i++) {
++                let w = all[i];
++                if (w.id > 0 && w.id % 100 === index + 1 && w.toplevels && w.toplevels.values && w.toplevels.values.length > 0) return true;
++            }
++            return false;
++        }
+         let ws = wsForId(index + 1);
+         return ws !== null && ws.toplevels && ws.toplevels.values && ws.toplevels.values.length > 0;
+     }
+@@ -191,6 +220,8 @@
+             Quickshell.execDetached(["swaymsg", "workspace", "number", wsId.toString()]);
+         } else if (isMango) {
+             Quickshell.execDetached(["mmsg", "dispatch", "view," + wsId]);
++        } else if (serpDesks) {
++            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-desk", "go", String(wsId)]);
+         } else {
+             Hyprland.dispatch("hl.dsp.focus({ workspace = " + wsId + " })");
+         }
+@@ -207,7 +238,7 @@
+         } else {
+             const fw = Hyprland.focusedWorkspace;
+             if (!fw) return -1;
+-            idx = fw.id - 1;
++            idx = (serpDesks && fw.id > 0) ? (fw.id % 100) - 1 : fw.id - 1;
+         }
+         return idx >= 0 ? idx : -1;
+     }
