@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Запуск оболочки Serpantinum (демон Quickshell). Один экземпляр.
+#   serpantinum-shell           — обычный запуск
+#   serpantinum-shell --login   — запуск при входе: если включён автовход SDDM, оболочка сама заблокирует экран
+#                                 (страховка: если за 20 с блокировки нет — hyprlock)
+# Если оболочка закрылась с ошибкой — перезапуск (до 5 раз за 2 минуты). Если она упала под блокировкой —
+# после перезапуска снова блокирует экран.
+export SERPANTINUM_DIR="${SERPANTINUM_RUNTIME:-$HOME/.local/share/serpantinum/runtime}"
+source "$SERPANTINUM_DIR/scripts/caching.sh"
+pgrep -f "quickshell -p $MAIN_QML" >/dev/null && { echo "already running"; exit 0; }
+locked_flag="$QS_RUN_DIR/lock/locked"
+autologin_conf=/etc/sddm.conf.d/20-serpantinum-autologin.conf
+
+lock_next=0
+if [ "${1:-}" = "--login" ] && [ -f "$autologin_conf" ]; then
+  lock_next=1
+  ( for _ in $(seq 1 80); do [ -e "$locked_flag" ] && exit 0; sleep 0.25; done
+    pidof hyprlock >/dev/null || hyprlock ) &
+fi
+
+starts=()
+while :; do
+  SERP_LOCK_ON_START=$lock_next quickshell -p "$MAIN_QML"
+  rc=$?
+  # 0 — обычный выход; 130/143 — остановлена намеренно (Ctrl+C / kill): не перезапускаем
+  case $rc in 0|130|143) exit 0 ;; esac
+  lock_next=0; [ -e "$locked_flag" ] && lock_next=1     # упала под блокировкой — снова заблокировать
+  now=$(date +%s); starts+=("$now")
+  recent=0; for t in "${starts[@]}"; do [ $((now - t)) -lt 120 ] && recent=$((recent+1)); done
+  if [ $recent -ge 5 ]; then
+    echo "оболочка падает слишком часто, остановка" >&2
+    [ $lock_next = 1 ] && { pidof hyprlock >/dev/null || hyprlock; }
+    exit 1
+  fi
+  echo "оболочка завершилась (код $rc), перезапуск" >&2
+  sleep 1
+  # не плодить копии: если оболочку уже запустил кто-то другой — выходим
+  pgrep -f "quickshell -p $MAIN_QML" >/dev/null && exit 0
+done

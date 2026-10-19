@@ -1,0 +1,170 @@
+{
+  "general": {
+    "language": "ru",
+    "avatarPath": "/home/rauan/.config/serpantinum/avatars/current.png",
+    "muteSfx": false,
+    "weatherInterval": 15,
+    "weatherUnit": "metric"
+  },
+  "syspanel": {
+    "clipExpandProgress": 0,
+    "clipExpanded": false,
+    "clipState": 1
+  },
+  "bar": {
+    "position": "top",
+    "width": 100,
+    "height": 40,
+    "opacity": 100,
+    "style": "fill",
+    "time": {
+      "format": "HH:mm"
+    },
+    "autohide": true,
+    "autohideTimeout": 500,
+    "modules": {
+      "left": [
+        "left",
+        "workspaces",
+        "media"
+      ],
+      "center": [
+        [
+          "timedate",
+          "info",
+          "weather"
+        ]
+      ],
+      "right": [
+        "tray",
+        [
+          "kb",
+          "wifi",
+          "bt",
+          "vol",
+          "bat"
+        ],
+        "winctl"
+      ]
+    },
+    "wifiStyle": "text",
+    "btStyle": "text",
+    "volStyle": "text",
+    "kbStyle": "text"
+  },
+  "theme": {
+    "fontFamily": "Adwaita Mono",
+    "borderRadius": 10,
+    "activePreset": "Matugen",
+    "matugen": true
+  },
+  "idle": {
+    "enabled": true,
+    "actions": {
+      "dim": {
+        "id": "dim",
+        "timeout": 150,
+        "enabled": true,
+        "respectInhibitors": true,
+        "mprisInhibit": true,
+        "command": "",
+        "resumeCommand": "",
+        "isCustom": false
+      },
+      "dpms": {
+        "id": "dpms",
+        "timeout": 450,
+        "enabled": true,
+        "respectInhibitors": true,
+        "mprisInhibit": true,
+        "command": "",
+        "resumeCommand": "",
+        "isCustom": false
+      },
+      "lock": {
+        "id": "lock",
+        "timeout": 300,
+        "enabled": true,
+        "respectInhibitors": true,
+        "mprisInhibit": true,
+        "command": "",
+        "resumeCommand": "",
+        "isCustom": false
+      },
+      "suspend": {
+        "id": "suspend",
+        "timeout": 600,
+        "enabled": true,
+        "respectInhibitors": true,
+        "mprisInhibit": true,
+        "command": "",
+        "resumeCommand": "",
+        "isCustom": false
+      }
+    }
+  },
+  "notifications": {
+    "dnd": false,
+    "position": "top right",
+    "sound": true,
+    "soundFile": ""
+  },
+  "display": {
+    "monitors": {
+      "eDP-1": {
+        "enabled": false,
+        "scale": 1
+      }
+    }
+  },
+  "dock": {
+    "enabled": true,
+    "position": "bottom",
+    "floating": true,
+    "onTop": true,
+    "exclusive": false,
+    "opacity": 85,
+    "elementSize": 48,
+    "hoverScale": 125,
+    "showRunningApps": true,
+    "showRunningIndicators": true,
+    "focusRunning": true,
+    "runningScope": "all",
+    "autohide": true,
+    "apps": [
+      {
+        "name": "Google Chrome",
+        "comment": "Access the Internet",
+        "desktop_id": "google-chrome",
+        "icon": "google-chrome"
+      },
+      {
+        "name": "Visual Studio Code",
+        "comment": "Code Editing. Redefined.",
+        "desktop_id": "com.microsoft.VSCode",
+        "icon": "vscode"
+      },
+      {
+        "name": "kitty",
+        "comment": "Terminal",
+        "desktop_id": "kitty",
+        "icon": "kitty"
+      },
+      {
+        "name": "Диспетчер файлов",
+        "comment": "Файлы и папки",
+        "desktop_id": "serp-files",
+        "icon": "system-file-manager"
+      }
+    ],
+    "smartAutohide": false,
+    "autohideTimeout": 500
+  },
+  "launcher": {
+    "position": "center",
+    "width": 640,
+    "itemCount": 8,
+    "terminalCommand": "kitty -e",
+    "smartRanking": true
+  }
+}

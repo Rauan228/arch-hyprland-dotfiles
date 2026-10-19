@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Клиент оболочки: serp toggle launcher | serp toggle system | serp open calendar ...
+export SERPANTINUM_DIR="${SERPANTINUM_RUNTIME:-$HOME/.local/share/serpantinum/runtime}"
+case "$2" in
+  taskmgr) exec quickshell -p "$SERPANTINUM_DIR/quickshell/Shell.qml" ipc call taskmgr "$1" ;;
+  launcher|applauncher|apps) exec quickshell -p "$SERPANTINUM_DIR/quickshell/Shell.qml" ipc call apps "$1" ;;   # наше меню приложений
+esac
+exec bash "$SERPANTINUM_DIR/scripts/qs_manager.sh" "$@"
