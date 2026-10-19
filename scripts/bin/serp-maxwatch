@@ -8,6 +8,7 @@ import json, os, socket, subprocess, time
 
 RUN = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 MAXED = f"{RUN}/serpantinum/maxed"
+MINIMIZED = f"{RUN}/serpantinum/minimized"
 SOCK = f"{RUN}/hypr/{os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', '')}/.socket.sock"
 SERP_MAX = os.path.join(os.path.dirname(os.path.realpath(__file__)), "serp-max")
 
@@ -32,6 +33,8 @@ def needs_check(files):
         c = clients.get(a)
         if c is None:
             return True                                           # окно закрыто — убрать запись
+        if c["workspace"]["id"] < 0 or os.path.exists(f"{MINIMIZED}/{a}"):
+            continue                                              # свёрнуто — не трогаем
         try:
             _, _, _, _, ax, ay, aw, ah = open(f"{MAXED}/{a}").read().split()
         except (OSError, ValueError):

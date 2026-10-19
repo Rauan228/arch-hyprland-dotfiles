@@ -22,11 +22,11 @@ esac
 w="address:$addr"
 
 minimize() {
-  local ws next
-  ws=$(jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.id' <<<"$clients")
-  [ -n "$ws" ] || return 0
+  local ws x y ww hh next
+  read -r ws x y ww hh < <(jq -r --arg a "$addr" '.[] | select(.address == $a) | "\(.workspace.id) \(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"' <<<"$clients")
+  [ -n "${ws:-}" ] || return 0
   [ "$ws" -lt 0 ] && return 0                                    # уже свёрнуто
-  echo "$ws" > "$state/$addr"
+  echo "$ws $x $y $ww $hh" > "$state/$addr"
   d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
   # фокус — следующему окну на том же столе (по истории фокуса), как в Windows
   next=$(jq -r --arg a "$addr" --argjson ws "$ws" '[.[] | select(.address != $a and .workspace.id == $ws and .mapped and (.hidden | not))]
@@ -39,13 +39,24 @@ minimize() {
 }
 
 restore() {
-  local ws
-  ws=$(cat "$state/$addr" 2>/dev/null || true); rm -f "$state/$addr"
+  local ws="" x="" y="" ww="" hh="" mx
+  read -r ws x y ww hh < "$state/$addr" 2>/dev/null || true
   # стол, с которого свернули, — если он ещё есть; иначе текущий
   if [ -z "$ws" ] || ! hyprctl workspaces -j | jq -e --argjson ws "$ws" 'any(.[]; .id == $ws)' >/dev/null; then
     ws=$(hyprctl activeworkspace -j | jq -r '.id')
   fi
   d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
+  # ровно на прежнее место (при переносе между столами Hyprland окно сдвигает);
+  # развёрнутое (serp-max) — снова на всю рабочую область
+  mx="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed/$addr"
+  if [ -f "$mx" ]; then
+    touch "$mx"; read -r _ _ _ _ x y ww hh < "$mx"
+  fi
+  if [ -n "$x" ]; then
+    d "hl.dsp.window.resize({ x = $ww, y = $hh, window = \"$w\" })"
+    d "hl.dsp.window.move({ x = $x, y = $y, window = \"$w\" })"
+  fi
+  rm -f "$state/$addr"
   d "hl.dsp.focus({ window = \"$w\" })"
   d "hl.dsp.window.bring_to_top({ window = \"$w\" })" 2>/dev/null || true
 }
