@@ -40,7 +40,7 @@ double_click_interval=400
 wheel_scroll_lines=3
 EOF
 
-# 2) kdeglobals: BreezeDark + бирюзовый акцент + наши фоны
+# 2) kdeglobals: BreezeDark + фиолетовый акцент + наши фоны
 python3 - "$HOME/.config/kdeglobals" <<'PY'
 import configparser, sys
 dst = sys.argv[1]
@@ -55,13 +55,15 @@ for s in old.sections():                     # сохранить чужие с�
 def put(sec, **kv):
     if not cp.has_section(sec): cp.add_section(sec)
     for k, v in kv.items(): cp.set(sec, k, v)
-accent, sel = "94,211,229", "46,139,152"
-for grp, bg, alt in [("View", "18,24,26", "23,32,35"), ("Window", "22,29,32", "26,35,38"),
-                     ("Button", "28,36,39", "33,43,47"), ("Header", "16,22,24", "22,29,32"),
-                     ("Complementary", "13,18,20", "18,24,26"), ("Tooltip", "28,36,39", "33,43,47")]:
+accent, sel = "111,116,242", "77,81,184"          # как у оболочки: фиолетовый акцент #6f74f2
+for grp, bg, alt in [("View", "38,39,52", "43,44,58"), ("Window", "31,32,43", "35,36,48"),
+                     ("Button", "48,49,63", "54,55,70"), ("Header", "27,28,38", "31,32,43"),
+                     ("Complementary", "24,25,34", "31,32,43"), ("Tooltip", "48,49,63", "54,55,70")]:
     put("Colors:" + grp, BackgroundNormal=bg, BackgroundAlternate=alt, DecorationFocus=accent, DecorationHover=accent,
-        ForegroundNormal="232,238,240", ForegroundInactive="169,182,186")
-put("Colors:Selection", BackgroundNormal=sel, BackgroundAlternate="38,115,126", DecorationFocus=accent, DecorationHover=accent)
+        ForegroundNormal="238,240,248", ForegroundInactive="160,163,184", ForegroundLink="143,147,255",
+        ForegroundVisited="183,131,240")
+put("Colors:Selection", BackgroundNormal=sel, BackgroundAlternate="66,69,160", DecorationFocus=accent, DecorationHover=accent,
+    ForegroundNormal="255,255,255", ForegroundInactive="220,222,240")
 put("General", ColorScheme="Serpantinum", TerminalApplication="kitty", TerminalService="kitty.desktop",
     font="Noto Sans,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1", AccentColor=accent)
 put("Icons", Theme="breeze-dark")
