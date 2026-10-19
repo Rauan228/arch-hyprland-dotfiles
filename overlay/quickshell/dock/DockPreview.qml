@@ -5,6 +5,7 @@ import "../"
 
 // Serpantinum: миниатюры окон приложения при наведении на значок в доке (как на панели задач Windows).
 // Клик по миниатюре — перейти к окну (свёрнутое разворачивается), ✕ — закрыть окно.
+// Правый клик по значку: миниатюры уходят, остаётся меню приложения.
 Item {
     id: dp
     required property Item anchorItem
@@ -14,14 +15,18 @@ Item {
     property bool open: false
     readonly property var wins: info && info.hasWindows ? (info.here || []).concat(info.elsewhere || []) : []
 
-    Timer { id: openTimer; interval: 450; onTriggered: dp.open = dp.wins.length > 0 }
+    // открыто меню правой кнопки — миниатюры прячем и не показываем, пока меню на экране (оно должно быть сверху)
+    readonly property bool menuOpen: typeof DockAppMenuController !== "undefined" && DockAppMenuController.isVisible
+    onMenuOpenChanged: if (menuOpen) { openTimer.stop(); open = false; }
+
+    Timer { id: openTimer; interval: 450; onTriggered: dp.open = dp.wins.length > 0 && !dp.menuOpen }
     Timer { id: closeTimer; interval: 250; onTriggered: if (!dp.hovered && !dp.popupHovered) dp.open = false }
     onHoveredChanged: { if (hovered) { closeTimer.stop(); openTimer.restart(); } else { openTimer.stop(); closeTimer.restart(); } }
     onPopupHoveredChanged: if (!popupHovered) closeTimer.restart()
     onWinsChanged: if (!wins.length) open = false
 
     PopupWindow {
-        visible: dp.open && dp.wins.length > 0 && dp.anchorItem.visible
+        visible: dp.open && !dp.menuOpen && dp.wins.length > 0 && dp.anchorItem.visible
         anchor.item: dp.anchorItem
         anchor.rect.x: dp.anchorItem.width / 2
         anchor.rect.y: -10
