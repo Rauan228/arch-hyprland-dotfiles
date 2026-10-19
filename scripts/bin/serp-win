@@ -5,7 +5,7 @@
 #            рабочего стола оно ушло, а фокус переходит на следующее окно под ним (а не остаётся на невидимом)
 #   restore  вернуть свёрнутое туда же, откуда свернули (тот же стол и место), поверх остальных и с фокусом
 set -euo pipefail
-act="${1:-}"; arg="${2:-}"
+act="${1:-}"; arg="${2:-}"; arg="${arg#address:}"   # принимаем и 0xADDR, и address:0xADDR
 state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"; mkdir -p "$state"
 d() { hyprctl dispatch "$1" >/dev/null; }
 
@@ -58,7 +58,7 @@ restore() {
   fi
   rm -f "$state/$addr"
   d "hl.dsp.focus({ window = \"$w\" })"
-  d "hl.dsp.window.bring_to_top({ window = \"$w\" })" 2>/dev/null || true
+  d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
 }
 
 case "$act" in

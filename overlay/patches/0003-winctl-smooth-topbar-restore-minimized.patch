@@ -69,10 +69,10 @@ diff -ru a/quickshell/singletons/system/WindowTracker.qml b/quickshell/singleton
          let nid = (typeof win === "object") ? win.nativeId : win;
          if (nid === undefined || nid === null || nid === "") return;
          let addr = root._formatHyprAddress(nid);
-+        // Serpantinum: свёрнутое окно (special:minimized) вернуть на текущий рабочий стол
-+        if (typeof win === "object" && String(win.workspaceLabel || "").indexOf("special:minimized") === 0 && typeof Hyprland !== "undefined") {
-+            let ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1;
-+            Hyprland.dispatch("hl.dsp.window.move({ workspace = \"" + ws + "\", window = \"" + addr + "\" })");
++        // Serpantinum: свёрнутое окно (special:minimized) вернуть туда же, откуда свернули (scripts/bin/serp-win)
++        if (typeof win === "object" && String(win.workspaceLabel || "").indexOf("special:minimized") === 0) {
++            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "restore", addr]);
++            return;
 +        }
          if (typeof Hyprland !== "undefined") {
              if (Hyprland.usingLua !== false) {

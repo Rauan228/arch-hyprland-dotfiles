@@ -29,8 +29,8 @@ ShellRoot {
             if (ev.name === "openwindow") { geomTimer.addr = String(ev.data).split(",")[0]; geomTimer.restart(); }
             if (ev.name !== "minimized" && ev.name !== "minimize") return;
             var p = String(ev.data).split(",");
-            if (p.length > 1 && p[1] === "1")
-                Hyprland.dispatch('hl.dsp.window.move({ workspace = "special:minimized", window = "address:0x' + p[0].replace(/^0x/, "") + '", silent = true })');
+            if (p.length > 1 && p[1] === "1")   // свернуть как кнопкой «─» в заголовке (scripts/bin/serp-win)
+                Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "min", "0x" + p[0].replace(/^0x/, "")]);
         }
     }
 

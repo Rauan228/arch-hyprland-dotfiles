@@ -87,10 +87,9 @@ Scope {
     }
     function activate(w) {
         if (!w) return;
-        if (w.minimized) {
-            var mon = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
-            var base = { "eDP-1": 0, "HDMI-A-1": 100, "DP-1": 200, "DP-2": 300 }[mon] || 0;
-            Hyprland.dispatch('hl.dsp.window.move({ workspace = "' + (base + curDesk()) + '", window = "address:' + w.address + '" })');
+        if (w.minimized) {   // вернуть туда, откуда свернули (scripts/bin/serp-win)
+            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "restore", w.address]);
+            return;
         }
         Hyprland.dispatch('hl.dsp.focus({ window = "address:' + w.address + '" })');
         Hyprland.dispatch('hl.dsp.window.alter_zorder({ mode = "top", window = "address:' + w.address + '" })');
