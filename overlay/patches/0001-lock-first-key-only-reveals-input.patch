@@ -1,0 +1,13 @@
+--- a/quickshell/lock/LockScreen.qml	2026-10-18 12:54:18.074425545 +0500
++++ b/quickshell/lock/LockScreen.qml	2026-10-18 12:54:18.081761143 +0500
+@@ -236,9 +236,7 @@
+                 if (event.key !== Qt.Key_Escape) {
+                     lockScreenRoot.inputActive = true;
+                     lockScreenRoot.restoreFocus();
+-                    if (event.text.length > 0 && event.key !== Qt.Key_Return && event.key !== Qt.Key_Enter && event.key !== Qt.Key_Tab && event.key !== Qt.Key_Backspace) {
+-                        passwordInput.insertText(event.text);
+-                    }
++                    // Serpantinum patch: the first key only reveals the input; it is not typed into the password.
+                     event.accepted = true;
+                 }
+             } else {
