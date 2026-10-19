@@ -1,0 +1,55 @@
+diff -ru a/quickshell/dock/DockAppButton.qml b/quickshell/dock/DockAppButton.qml
+--- a/quickshell/dock/DockAppButton.qml	2026-10-18 22:58:42.366583904 +0500
++++ b/quickshell/dock/DockAppButton.qml	2026-10-18 22:58:42.386020760 +0500
+@@ -513,4 +513,11 @@
+             }
+         }
+     }
++
++    // Serpantinum: миниатюры окон при наведении (как на панели задач Windows)
++    DockPreview {
++        anchorItem: btnShape
++        info: dockButton.runningInfo
++        hovered: btnMa.containsMouse && !dockButton.dockWindow.editMode
++    }
+ }
+diff -ru a/quickshell/dock/DockRunningButton.qml b/quickshell/dock/DockRunningButton.qml
+--- a/quickshell/dock/DockRunningButton.qml	2026-10-18 22:58:42.372340407 +0500
++++ b/quickshell/dock/DockRunningButton.qml	2026-10-18 22:58:42.386075799 +0500
+@@ -348,4 +348,11 @@
+             }
+         }
+     }
++
++    // Serpantinum: миниатюры окон при наведении (как на панели задач Windows)
++    DockPreview {
++        anchorItem: runningBtnShape
++        info: runningDockButton.runningInfo
++        hovered: runningBtnMa.containsMouse && !runningDockButton.dockWindow.editMode
++    }
+ }
+diff -ru a/quickshell/dock/DockWindowApps.qml b/quickshell/dock/DockWindowApps.qml
+--- a/quickshell/dock/DockWindowApps.qml	2026-10-18 22:58:42.376451115 +0500
++++ b/quickshell/dock/DockWindowApps.qml	2026-10-18 22:58:42.386149622 +0500
+@@ -470,6 +470,13 @@
+             targetWin = info.elsewhere[0];
+         }
+ 
++        // Serpantinum: как на панели задач Windows — клик по активному приложению с одним окном сворачивает его
++        let total = (info.here ? info.here.length : 0) + (info.elsewhere ? info.elsewhere.length : 0);
++        if (targetWin && total === 1 && targetWin.focused && targetWin.workspace >= 0) {
++            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "min"]);
++            return;
++        }
++
+         if (targetWin) {
+             if (typeof WindowTracker !== "undefined") {
+                 WindowTracker.focusWindow(targetWin);
+diff -ru a/quickshell/dock/qmldir b/quickshell/dock/qmldir
+--- a/quickshell/dock/qmldir	2026-10-18 22:58:42.359646446 +0500
++++ b/quickshell/dock/qmldir	2026-10-18 22:58:42.385352927 +0500
+@@ -8,3 +8,4 @@
+ DockWindowApps 1.0 DockWindowApps.qml
+ DockWindow 1.0 DockWindow.qml
+ DockWindowState 1.0 DockWindowState.qml
++DockPreview 1.0 DockPreview.qml
