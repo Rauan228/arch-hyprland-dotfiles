@@ -50,3 +50,13 @@ for _, name in ipairs(MICE) do
         hl.device({ name = name, accel_profile = "flat", sensitivity = MOUSE_SPEED - 1 })
     end
 end
+
+-- ---------- жесты тачпада как в Windows ----------
+-- 3 пальца влево/вправо — соседнее окно текущего рабочего стола (по порядку, как кнопки на панели задач;
+--   свёрнутые разворачиваются) — scripts/bin/serp-cycle
+-- 4 пальца влево/вправо — соседний рабочий стол сразу на всех мониторах — scripts/bin/serp-desk
+local bin = os.getenv("HOME") .. "/.config/serpantinum/bin/"
+hl.gesture({ fingers = 3, direction = "left",  action = function() hl.exec_cmd(bin .. "serp-cycle next") end })
+hl.gesture({ fingers = 3, direction = "right", action = function() hl.exec_cmd(bin .. "serp-cycle prev") end })
+hl.gesture({ fingers = 4, direction = "left",  action = function() hl.exec_cmd(bin .. "serp-desk next") end })
+hl.gesture({ fingers = 4, direction = "right", action = function() hl.exec_cmd(bin .. "serp-desk prev") end })

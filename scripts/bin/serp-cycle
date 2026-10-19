@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# serp-cycle next|prev — переключиться на следующее / предыдущее окно текущего рабочего стола
+# (жест тачпада тремя пальцами влево/вправо). Окна идут в постоянном порядке — в каком открывались,
+# как кнопки на панели задач; свёрнутые тоже в очереди и при переходе на них разворачиваются (serp-win).
+set -euo pipefail
+dir="${1:-next}"
+here="$(dirname "$(readlink -f "$0")")"
+state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"
+d() { hyprctl dispatch "$1" >/dev/null; }
+
+active=$(hyprctl activewindow -j | jq -r '.address // empty')
+desk=$(hyprctl activeworkspace -j | jq -r '.id')
+[ "$desk" -gt 0 ] 2>/dev/null || exit 0
+desk=$(( desk % 100 ))
+
+# свёрнутые: с какого стола свернули (запись serp-win: первая колонка — номер рабочего пространства)
+mini='{}'
+for f in "$state"/0x*; do
+  [ -e "$f" ] || continue
+  read -r ws _ < "$f" || continue
+  mini=$(jq -c --arg a "$(basename "$f")" --argjson ws "${ws:-0}" '. + {($a): $ws}' <<<"$mini")
+done
+
+mapfile -t wins < <(hyprctl clients -j | jq -r --argjson d "$desk" --argjson mini "$mini" '
+  [ .[] | select(.mapped and (
+        (.workspace.id > 0 and .workspace.id % 100 == $d)
+        or (.workspace.name == "special:minimized" and (($mini[.address] // 0) % 100 == $d))))
+  ] | sort_by(.stableId | ltrimstr("0x") | explode | map(if . >= 97 then . - 87 elif . >= 65 then . - 55 else . - 48 end)
+                                    | reduce .[] as $x (0; . * 16 + $x))
+  | .[] | "\(.address) \(.workspace.name)"')
+n=${#wins[@]}
+[ "$n" -gt 1 ] || exit 0
+
+i=-1
+for k in "${!wins[@]}"; do [ "${wins[$k]%% *}" = "$active" ] && i=$k; done
+if [ "$dir" = prev ]; then t=$(( (i - 1 + n) % n )); else t=$(( (i + 1) % n )); fi
+[ "$i" -lt 0 ] && t=0
+addr=${wins[$t]%% *}; ws=${wins[$t]#* }
+
+if [ "$ws" = special:minimized ]; then
+  exec "$here/serp-win" restore "$addr"
+fi
+d "hl.dsp.focus({ window = \"address:$addr\" })"
+d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"address:$addr\" })"
