@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# serp-max — «развернуть» как в Windows/macOS: окно остаётся обычным плавающим, но занимает весь экран;
+# прежние размер и место запоминаются.
+#   toggle [ADDR]  развернуть / восстановить (зелёная кнопка, двойной клик по заголовку, Win+↑)
+#   restore [ADDR] восстановить, если развёрнуто (Win+↓)
+#   maximize ADDR [X Y W H] развернуть, запомнив указанный прежний размер
+#   check          вызывается serp-fit: развёрнутое окно потянули за заголовок → вернуть прежний размер;
+#                  программа сама развернулась (режим Hyprland «maximized», из-за которого окно улетало вверх
+#                  при перетаскивании) → перевести в наш режим
+set -u
+BAR=32
+dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed"; mkdir -p "$dir"
+d() { hyprctl dispatch "$1" >/dev/null; }
+
+info() {   # → x y w h fullscreen monitor
+  hyprctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1]) \(.fullscreen) \(.monitor)"'
+}
+area() {   # рабочая область монитора → x y w h
+  hyprctl monitors -j | jq -r --argjson id "$1" --argjson bar $BAR '.[] | select(.id == $id) |
+    "\(.x + .reserved[0]) \(.y + .reserved[1] + $bar) \(((.width / .scale) | floor) - .reserved[0] - .reserved[2]) \(((.height / .scale) | floor) - .reserved[1] - .reserved[3] - $bar)"'
+}
+place() { d "hl.dsp.window.resize({ x = $4, y = $5, window = \"address:$1\" })"; d "hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" })"; }
+
+maximize() {   # addr [x y w h — что запомнить]
+  local a=$1 x y w h fs mon ax ay aw ah
+  read -r x y w h fs mon < <(info "$a"); [ -n "${mon:-}" ] || return
+  [ "$fs" != 0 ] && d "hl.dsp.window.fullscreen({ mode = \"maximized\", action = \"unset\", window = \"address:$a\" })"
+  read -r ax ay aw ah < <(area "$mon")
+  if [ $# -ge 5 ]; then x=$2; y=$3; w=$4; h=$5
+  elif [ "$fs" != 0 ] || { [ "$w" -ge "$aw" ] && [ "$h" -ge "$ah" ]; }; then
+    # окно уже было во весь экран — «прежним» размером считаем 75 % экрана по центру
+    w=$(( aw * 3 / 4 )); h=$(( ah * 3 / 4 )); x=$(( ax + (aw - w) / 2 )); y=$(( ay + (ah - h) / 2 ))
+  fi
+  echo "$x $y $w $h $ax $ay $aw $ah" > "$dir/$a"
+  d "hl.dsp.window.float({ action = \"enable\", window = \"address:$a\" })"
+  place "$a" "$ax" "$ay" "$aw" "$ah"
+}
+restore() {   # addr [cursorX] — вернуть запомненный размер (если перетаскивают — под курсор)
+  local a=$1 sx sy sw sh ax ay aw ah x y w h fs mon nx
+  [ -f "$dir/$a" ] || return 1
+  read -r sx sy sw sh ax ay aw ah < "$dir/$a"; rm -f "$dir/$a"
+  if [ $# -ge 2 ]; then
+    read -r x y w h fs mon < <(info "$a")
+    nx=$(( $2 - sw / 2 )); place "$a" "$nx" "$y" "$sw" "$sh"
+  else
+    place "$a" "$sx" "$sy" "$sw" "$sh"
+  fi
+}
+
+cmd="${1:-toggle}"; a="${2:-$(hyprctl activewindow -j | jq -r '.address // empty')}"
+case "$cmd" in
+  toggle)
+    [ -n "$a" ] || exit 0
+    if [ -f "$dir/$a" ]; then
+      # запомненное состояние есть: если окно сейчас развёрнуто — восстановить,
+      # если прилипло к половине/четверти (serp-snap) — развернуть, сохранив прежний размер
+      read -r sx sy sw sh gx gy gw gh < "$dir/$a"; read -r x y w h fs mon < <(info "$a"); read -r ax ay aw ah < <(area "$mon")
+      if [ "$gx $gy $gw $gh" = "$ax $ay $aw $ah" ]; then restore "$a"; else maximize "$a" "$sx" "$sy" "$sw" "$sh"; fi
+    else
+      maximize "$a"
+    fi ;;
+  maximize)   # maximize ADDR [x y w h — прежний размер]
+    shift 2; [ -n "$a" ] && maximize "$a" "$@" ;;
+  restore)
+    [ -n "$a" ] || exit 0
+    restore "$a" || { read -r x y w h fs mon < <(info "$a"); [ "${fs:-0}" = 1 ] && d "hl.dsp.window.fullscreen({ mode = \"maximized\", action = \"unset\", window = \"address:$a\" })"; } ;;
+  check)
+    # программа сама включила режим maximized Hyprland → наш режим (размер «до» — 75 % экрана по центру)
+    hyprctl clients -j | jq -r '.[] | select(.fullscreen == 1 and .workspace.id > 0) | "\(.address) \(.monitor)"' |
+    while read -r a mon; do
+      read -r ax ay aw ah < <(area "$mon")
+      w=$(( aw * 3 / 4 )); h=$(( ah * 3 / 4 ))
+      maximize "$a" $(( ax + (aw - w) / 2 )) $(( ay + (ah - h) / 2 )) "$w" "$h"
+    done
+    # развёрнутые нами окна: сдвинули (тянут за заголовок) → прежний размер; изменили размер → просто забыть
+    cx=$(hyprctl cursorpos -j 2>/dev/null | jq -r '.x // empty')
+    for f in "$dir"/0x*; do
+      [ -e "$f" ] || continue
+      a=$(basename "$f"); read -r sx sy sw sh ax ay aw ah < "$f"
+      read -r x y w h fs mon < <(info "$a")
+      if [ -z "${mon:-}" ]; then rm -f "$f"; continue; fi            # окно закрыто
+      [ "$x" = "$ax" ] && [ "$y" = "$ay" ] && [ "$w" = "$aw" ] && [ "$h" = "$ah" ] && continue
+      if [ "$w" = "$aw" ] && [ "$h" = "$ah" ]; then restore "$a" "${cx:-$((x + sw / 2))}"; else rm -f "$f"; fi
+    done ;;
+  *) echo "usage: serp-max toggle|restore [ADDR] | check" >&2; exit 2 ;;
+esac
