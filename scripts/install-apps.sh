@@ -22,7 +22,8 @@ fi
 echo "==> официальные пакеты"
 sudo pacman -Syu --needed \
   telegram-desktop discord obsidian spotify-launcher \
-  steam lib32-nvidia-utils lib32-vulkan-intel
+  steam lib32-nvidia-utils lib32-vulkan-intel \
+  7zip zip unzip
 
 echo "==> AUR: WhatsApp (ZapZap) и Google Antigravity"
 yay -S --needed zapzap antigravity
