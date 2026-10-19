@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# serp-minall all | others | restore — как Win+M / Win+Home / Win+Shift+M в Windows:
+# свернуть все окна текущего рабочего стола (или все, кроме активного) и вернуть их обратно.
+set -u
+state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minall"; mkdir -p "$(dirname "$state")"
+cur=$(hyprctl activeworkspace -j | jq -r '.id % 100')
+act=$(hyprctl activewindow -j | jq -r '.address // empty')
+case "${1:-all}" in
+  all|others)
+    : > "$state"
+    hyprctl clients -j | jq -r --argjson c "$cur" '.[] | select(.workspace.id > 0 and (.workspace.id % 100) == $c) | "\(.address) \(.workspace.id)"' |
+    while read -r a ws; do
+      [ "$1" = others ] && [ "$a" = "$act" ] && continue
+      echo "$a $ws" >> "$state"
+      hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"address:$a\", silent = true })" >/dev/null
+    done ;;
+  restore)
+    [ -f "$state" ] || exit 0
+    while read -r a ws; do
+      hyprctl dispatch "hl.dsp.window.move({ workspace = \"$ws\", window = \"address:$a\", silent = true })" >/dev/null
+    done < "$state"
+    rm -f "$state" ;;
+esac
