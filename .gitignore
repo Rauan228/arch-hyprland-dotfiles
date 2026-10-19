@@ -1,0 +1,22 @@
+# секреты и личные данные
+.env
+*.key
+*.pem
+*.token
+secrets/
+*credentials*
+*.kdbx
+id_*
+# аватары пользователей и личные файлы
+config/avatars/
+*.face
+*.face.icon
+# бэкапы, временное
+backups/
+*~
+*.bak
+*.swp
+.cache/
+.claude/
+node_modules/
+build/
