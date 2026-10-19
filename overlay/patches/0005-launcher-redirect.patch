@@ -1,0 +1,18 @@
+diff -ru a/quickshell/Main.qml b/quickshell/Main.qml
+--- a/quickshell/Main.qml	2026-10-18 20:23:00.128298390 +0500
++++ b/quickshell/Main.qml	2026-10-18 20:23:00.143481163 +0500
+@@ -97,7 +97,13 @@
+                 return;
+             }
+ 
+-            if (cmd === "launcher" || targetWidget === "launcher") {
++            if (cmd === "launcher" || targetWidget === "launcher" || cmd === "applauncher" || targetWidget === "applauncher") {
++                // Serpantinum patch: меню приложений — наше (apps/AppLauncher.qml, IPC "apps")
++                ClipboardController.hide();
++                Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp", cmd === "close" ? "close" : (cmd === "open" ? "open" : "toggle"), "apps"]);
++                return;
++            }
++            if (false) {
+                 if (cmd === "close") {
+                     LauncherController.hide();
+                 } else if (cmd === "open") {
