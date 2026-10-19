@@ -8,7 +8,8 @@
   rename PATH NEWNAME
   info PATH                      дата создания, теги и примечание (xattr user.xdg.tags / user.xdg.comment), размер папки
   settags PATH "a,b"  |  setnote PATH TEXT
-  drives                         смонтированные диски (df)
+  drives                         смонтированные диски (df) + неподключённые съёмные разделы (lsblk)
+  mount DEV | eject DEV          подключить / извлечь съёмный диск (udisksctl, без root)
   trashlist | restore NAME... | emptytrash
   search ROOT QUERY              рекурсивный поиск по имени (fd)
   recent [N]                     недавние файлы (~/.local/share/recently-used.xbel)
@@ -148,7 +149,37 @@ def main():
                     continue
                 seen.add(f[0])
                 res.append({"dev": f[0], "fs": f[1], "size": int(f[2]), "used": int(f[3]), "avail": int(f[4]), "mount": f[5]})
+            # съёмные (USB, SD): помечаем смонтированные и добавляем неподключённые
+            r = subprocess.run(["lsblk", "-J", "-b", "-p", "-o", "PATH,FSTYPE,LABEL,SIZE,RM,HOTPLUG,TRAN,MOUNTPOINT"], capture_output=True, text=True)
+            def walk(nodes, removable=False):
+                for n in nodes:
+                    rem = removable or bool(n.get("rm")) or bool(n.get("hotplug")) or n.get("tran") == "usb"
+                    yield n, rem
+                    yield from walk(n.get("children") or [], rem)
+            for n, rem in walk(json.loads(r.stdout or "{}").get("blockdevices", [])):
+                if not rem or not n.get("fstype") or n["fstype"] in ("swap", "crypto_LUKS"):
+                    continue
+                d = next((x for x in res if x["dev"] == n["path"]), None)
+                if d:
+                    d["removable"], d["label"] = True, n.get("label") or ""
+                elif not n.get("mountpoint"):
+                    res.append({"dev": n["path"], "fs": n["fstype"], "size": int(n.get("size") or 0), "used": 0, "avail": 0,
+                                "mount": "", "label": n.get("label") or "", "removable": True})
             return out({"ok": True, "drives": res})
+        if cmd == "mount":
+            r = subprocess.run(["udisksctl", "mount", "-b", a[1], "--no-user-interaction"], capture_output=True, text=True)
+            if r.returncode != 0 and "AlreadyMounted" not in r.stderr:
+                return out({"ok": False, "error": r.stderr.strip()})
+            m = subprocess.run(["lsblk", "-no", "MOUNTPOINT", a[1]], capture_output=True, text=True).stdout.strip()
+            return out({"ok": bool(m), "mount": m})
+        if cmd == "eject":
+            subprocess.run(["sync"])
+            r = subprocess.run(["udisksctl", "unmount", "-b", a[1], "--no-user-interaction"], capture_output=True, text=True)
+            if r.returncode != 0 and "NotMounted" not in r.stderr:
+                return out({"ok": False, "error": "Диск занят: закройте открытые с него файлы" if "busy" in r.stderr.lower() else r.stderr.strip()})
+            disk = subprocess.run(["lsblk", "-no", "PKNAME", "-p", a[1]], capture_output=True, text=True).stdout.strip() or a[1]
+            subprocess.run(["udisksctl", "power-off", "-b", disk, "--no-user-interaction"], capture_output=True, text=True)
+            return out({"ok": True})
         if cmd == "trashlist":
             base = os.path.expanduser("~/.local/share/Trash")
             items = []

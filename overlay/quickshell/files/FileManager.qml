@@ -211,7 +211,18 @@ Scope {
     }
     function toRows(items) { return (items || []).map(function(it) { return { name: it.name, path: it.path, isdir: it.isdir, size: it.isdir ? -1 : it.size, modified: new Date(it.modified * 1000) }; }); }
     function loadQuick() { runOp(["recent", "40"], function(o) { if (page === "quick") { extRows = toRows(o.items); rebuild(); } }); }
-    function loadDrives() { extRows = []; runOp(["drives"], function(o) { drives = o.drives || []; rebuild(); }); }
+    function loadDrives() { extRows = []; runOp(["drives"], function(o) { if (JSON.stringify(o.drives || []) !== JSON.stringify(drives)) drives = o.drives || []; rebuild(); }); }
+    function openDrive(d) {
+        if (d.mount) { go("folder", d.mount); return; }
+        say("Подключение «" + (d.label || d.dev) + "»…");
+        runOp(["mount", d.dev], function(o) { if (o.ok) { loadDrives(); go("folder", o.mount); } else say("Не удалось подключить: " + (o.error || "ошибка")); });
+    }
+    function ejectDrive(d) {
+        if (page === "folder" && d.mount && (path === d.mount || path.indexOf(d.mount + "/") === 0)) go("computer", home);
+        runOp(["eject", d.dev], function(o) { say(o.ok ? "Диск можно извлечь" : o.error); loadDrives(); });
+    }
+    // новые флешки появляются без перезахода на страницу
+    Timer { interval: 2500; repeat: true; running: fm.shown && fm.page === "computer"; onTriggered: fm.loadDrives() }
     function loadTrash() {
         runOp(["trashlist"], function(o) {
             if (page !== "trash") return;
@@ -653,15 +664,28 @@ Scope {
                             required property var modelData
                             width: 320; height: 96; radius: 12
                             color: dma.containsMouse ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(1, 1, 1, 0.05); border.width: 1; border.color: fm.line
-                            FIcon { x: 16; y: 18; name: "drive"; width: 40; height: 40; color: "#c9cbff"; stroke: 1.4 }
+                            FIcon { x: 16; y: 18; name: modelData.removable ? "usb" : "drive"; width: 40; height: 40; color: modelData.removable ? "#9be7c4" : "#c9cbff"; stroke: 1.4 }
                             Column {
-                                x: 70; y: 16; width: parent.width - 86; spacing: 6
-                                Text { text: (modelData.mount === "/" ? "Системный диск" : modelData.mount.substring(modelData.mount.lastIndexOf("/") + 1)) + "  (" + modelData.mount + ")"; color: fm.textMain; font { family: fm.font; pixelSize: 14 } }
+                                x: 70; y: 16; width: parent.width - 86 - (modelData.removable ? 30 : 0); spacing: 6
+                                Text { width: parent.width; elide: Text.ElideRight
+                                       text: modelData.mount === "/" ? "Системный диск  (/)"
+                                           : modelData.removable ? (modelData.label || "Съёмный диск") + "  (" + modelData.dev.replace("/dev/", "") + ")"
+                                           : modelData.mount.substring(modelData.mount.lastIndexOf("/") + 1) + "  (" + modelData.mount + ")"
+                                       color: fm.textMain; font { family: fm.font; pixelSize: 14 } }
                                 Rectangle { width: parent.width; height: 8; radius: 4; color: Qt.rgba(1, 1, 1, 0.1)
-                                    Rectangle { width: parent.width * modelData.used / Math.max(1, modelData.size); height: parent.height; radius: 4; color: modelData.used / modelData.size > 0.9 ? "#e5484d" : fm.accent } }
-                                Text { text: "Свободно " + FT.size(modelData.avail) + " из " + FT.size(modelData.size) + " · " + modelData.fs; color: fm.textSub; font { family: fm.font; pixelSize: 12 } }
+                                    Rectangle { visible: !!modelData.mount; width: parent.width * modelData.used / Math.max(1, modelData.size); height: parent.height; radius: 4; color: modelData.used / modelData.size > 0.9 ? "#e5484d" : fm.accent } }
+                                Text { text: modelData.mount ? "Свободно " + FT.size(modelData.avail) + " из " + FT.size(modelData.size) + " · " + modelData.fs
+                                                             : "Не подключён · " + FT.size(modelData.size) + " · нажмите, чтобы открыть"
+                                       color: fm.textSub; font { family: fm.font; pixelSize: 12 } }
                             }
-                            MouseArea { id: dma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: fm.go("folder", modelData.mount) }
+                            MouseArea { id: dma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: fm.openDrive(modelData) }
+                            Rectangle {
+                                visible: !!modelData.removable && !!modelData.mount
+                                anchors { right: parent.right; top: parent.top; margins: 10 }
+                                width: 28; height: 28; radius: 7; color: ema.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                FIcon { anchors.centerIn: parent; name: "eject"; width: 16; height: 16; color: fm.textSub }
+                                MouseArea { id: ema; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: fm.ejectDrive(modelData) }
+                            }
                         }
                     }
                 }
