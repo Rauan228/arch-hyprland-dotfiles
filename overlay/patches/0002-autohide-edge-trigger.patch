@@ -1,0 +1,39 @@
+diff -ru a/quickshell/bar/Bar.qml b/quickshell/bar/Bar.qml
+--- a/quickshell/bar/Bar.qml	2026-10-18 18:27:45.681091540 +0500
++++ b/quickshell/bar/Bar.qml	2026-10-18 18:27:45.692166288 +0500
+@@ -268,18 +268,19 @@
+                 right: isFill ? 0 : (barPosition === "left" ? 0 : (autohide ? 0 : s(4)))
+             }
+ 
+-            exclusiveZone: (!barConfigReady || autohide || shouldHideForRedact) ? 0 : barHeight
++            // Serpantinum patch: при автоскрытии резервировать место, только пока панель показана (окна сдвигаются)
++            exclusiveZone: (!barConfigReady || shouldHideForRedact) ? 0 : ((autohide && !isRevealed) ? 0 : barHeight)
+             color: "transparent"
+ 
+-            property real activeMaskHeight: shouldHideForRedact ? 0 : ((autohide && !isRevealed) ? s(4) : (isVertical ? (isFill ? barWindowRoot.height : (effectiveBarHeight + edgePadding * 2)) : (isFill ? (barHeight + cornerRadius) : (barHeight + edgePadding))))
+-            property real activeMaskWidth: shouldHideForRedact ? 0 : ((autohide && !isRevealed) ? s(4) : (isVertical ? (isFill ? (barHeight + cornerRadius) : (barHeight + edgePadding)) : (isFill ? barWindowRoot.width : (effectiveBarWidth + edgePadding * 2))))
++            property real activeMaskHeight: shouldHideForRedact ? 0 : ((autohide && !isRevealed) ? 2 : (isVertical ? (isFill ? barWindowRoot.height : (effectiveBarHeight + edgePadding * 2)) : (isFill ? (barHeight + cornerRadius) : (barHeight + edgePadding))))
++            property real activeMaskWidth: shouldHideForRedact ? 0 : ((autohide && !isRevealed) ? 2 : (isVertical ? (isFill ? (barHeight + cornerRadius) : (barHeight + edgePadding)) : (isFill ? barWindowRoot.width : (effectiveBarWidth + edgePadding * 2))))
+ 
+             mask: Region {
+                 Region {
+                     x: barWindowRoot.isVertical ? (barWindowRoot.barPosition === "right" ? (barWindowRoot.width - barWindowRoot.activeMaskWidth) : 0) : barWindowRoot.currentBarMinX
+                     y: barWindowRoot.isVertical ? barWindowRoot.currentBarMinY : (barWindowRoot.barPosition === "bottom" ? barWindowRoot.baseOffsetY : 0)
+                     width: barWindowRoot.isVertical ? barWindowRoot.activeMaskWidth : (barWindowRoot.currentBarMaxX - barWindowRoot.currentBarMinX)
+-                    height: barWindowRoot.isVertical ? (barWindowRoot.currentBarMaxY - barWindowRoot.currentBarMinY) : (isFill ? barWindowRoot.barHeight : barWindowRoot.activeMaskHeight)
++                    height: barWindowRoot.isVertical ? (barWindowRoot.currentBarMaxY - barWindowRoot.currentBarMinY) : ((isFill && !(barWindowRoot.autohide && !barWindowRoot.isRevealed)) ? barWindowRoot.barHeight : barWindowRoot.activeMaskHeight)
+                 }
+                 Region {
+                     x: barWindowRoot.isVertical ? (barWindowRoot.barPosition === "right" ? (barWindowRoot.width - barWindowRoot.barHeight - barWindowRoot.cornerRadius) : barWindowRoot.barHeight) : 0
+diff -ru a/quickshell/dock/DockWindow.qml b/quickshell/dock/DockWindow.qml
+--- a/quickshell/dock/DockWindow.qml	2026-10-18 18:27:45.682102322 +0500
++++ b/quickshell/dock/DockWindow.qml	2026-10-18 18:27:45.692280619 +0500
+@@ -76,7 +76,7 @@
+     }
+ 
+     property int autohideTimeout: rawDockSettings.autohideTimeout !== undefined ? rawDockSettings.autohideTimeout : 1000
+-    property real autohideHitSize: s(18)
++    property real autohideHitSize: 2   // Serpantinum patch: только у самого края
+ 
+     property real editMargin: (editMode && !dockFloating) ? s(20) : 0
+     Behavior on editMargin {
