@@ -52,6 +52,11 @@ geom() {   # addr x y w h [opacity]
   [ -n "${6:-}" ] && b="$b ; dispatch hl.dsp.window.set_prop({ prop = \"opacity\", value = \"$6\", window = \"address:$1\" })"
   hyprctl --batch "$b" >/dev/null
 }
+slide() {  # addr x y [opacity] — только сдвиг (и прозрачность), БЕЗ изменения размера: программа не перерисовывается
+  local b="dispatch hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" })"
+  [ -n "${4:-}" ] && b="$b ; dispatch hl.dsp.window.set_prop({ prop = \"opacity\", value = \"$4\", window = \"address:$1\" })"
+  hyprctl --batch "$b" >/dev/null
+}
 
 minimize() {
   local ws x y ww hh mon op mx my mw mh tw th tx ty next
@@ -59,15 +64,17 @@ minimize() {
   [ -n "${ws:-}" ] || return 0
   [ "$ws" -lt 0 ] && return 0                                    # уже свёрнуто
   op=$(hyprctl getprop "$w" opacity -j 2>/dev/null | jq -r '.opacity // 1' 2>/dev/null); op=${op:-1}
-  # куда «засасывать»: док — середина нижнего края монитора окна
+  # куда «засасывать»: в док — окно уезжает к середине нижнего края монитора и уходит под него, растворяясь.
+  # Размер окна не меняем: если сжимать, Chrome/VS Code/Telegram перерисовывают интерфейс под крошечный размер
+  # и на долю секунды видно их «сломанную» вёрстку
   read -r mx my mw mh < <(hyprctl monitors -j | jq -r --argjson m "$mon" '.[] | select(.id == $m) | "\(.x) \(.y) \((.width / .scale) | floor) \((.height / .scale) | floor)"')
-  tw=$(( ww / 8 > 48 ? ww / 8 : 48 )); th=$(( hh / 8 > 32 ? hh / 8 : 32 ))
-  tx=$(( mx + mw / 2 - tw / 2 )); ty=$(( my + mh - th - 6 ))
+  tw=$ww; th=$hh
+  tx=$(( mx + mw / 2 - ww / 2 )); ty=$(( my + mh + 20 ))
   echo "$ws $x $y $ww $hh $op $tx $ty $tw $th" > "$state/$addr"
   # следующее окно на том же столе (по истории фокуса) — получит фокус, как в Windows
   next=$(jq -r --arg a "$addr" --argjson ws "$ws" '[.[] | select(.address != $a and .workspace.id == $ws and .mapped and (.hidden | not))]
                                                    | sort_by(.focusHistoryID) | .[0].address // empty' <<<"$clients")
-  anim in; geom "$addr" "$tx" "$ty" "$tw" "$th" 0; sleep "$ANIM"
+  anim in; slide "$addr" "$tx" "$ty" 0; sleep "$ANIM"
   # фокус отдаём ДО переноса: иначе Hyprland сам ищет, кому отдать фокус, берёт уже свёрнутое окно
   # из истории, открывает скрытый стол — и на мгновение мелькают свёрнутые окна
   if [ -n "$next" ]; then
@@ -77,9 +84,9 @@ minimize() {
   fi
   # за пределы всех экранов (мгновенно) — тогда скрытый стол, даже если Hyprland на миг его покажет, пуст
   anim off
-  geom "$addr" "$OFF" "$OFF" "$tw" "$th"
+  slide "$addr" "$OFF" "$OFF"
   d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
-  geom "$addr" "$OFF" "$OFF" "$tw" "$th"
+  slide "$addr" "$OFF" "$OFF"
   anim default
 }
 
@@ -94,14 +101,19 @@ restore() {
   mx="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed/$addr"
   [ -f "$mx" ] && touch "$mx"
   if [ -n "$tx" ]; then
-    # мгновенно поставить крошечным и прозрачным у дока, затем «вылететь» на прежнее место и в прежний размер
+    # мгновенно поставить прозрачным под доком, затем «вылететь» на прежнее место (размер не трогаем —
+    # он и так прежний, программа ничего не перерисовывает)
     anim off
     d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
-    geom "$addr" "$tx" "$ty" "$tw" "$th" 0
+    # свёрнутое прежней версией (сжатием) — сначала вернуть размер, пока окно невидимо
+    if ! hyprctl clients -j | jq -e --arg a "$addr" --argjson w "$ww" --argjson h "$hh" 'any(.[]; .address == $a and .size == [$w, $h])' >/dev/null; then
+      geom "$addr" "$tx" "$ty" "$ww" "$hh" 0
+    fi
+    slide "$addr" "$tx" "$ty" 0
     d "hl.dsp.focus({ window = \"$w\" })"
     d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
     sleep 0.03
-    anim out; geom "$addr" "$x" "$y" "$ww" "$hh" "${op:-1}"; sleep "$ANIM"
+    anim out; slide "$addr" "$x" "$y" "${op:-1}"; sleep "$ANIM"
     anim default
   else
     # свёрнуто до этой версии (без записи) — просто вернуть
