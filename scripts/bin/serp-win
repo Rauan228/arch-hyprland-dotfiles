@@ -10,15 +10,10 @@ state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"; mkdir -p "
 d() { hyprctl dispatch "$1" >/dev/null; }
 
 # special МОНИТОР — оболочка зовёт, когда на мониторе сам открылся скрытый стол свёрнутых окон
-# (программа попросила фокус: Telegram/VS Code делают это сразу после своего «─» или по уведомлению).
-# Стол свёрнутых никогда не показываем: только что свёрнутое (< 2 с) остаётся свёрнутым,
-# а позже активированное (клик по уведомлению) возвращаем на своё место.
+# (Hyprland отдал фокус свёрнутому окну или программа попросила фокус — Telegram/VS Code после своего «─»).
+# Стол свёрнутых никогда не показываем и окна сами не возвращаем: только закрыть стол и вернуть фокус.
+# Свёрнутые окна стоят за пределами экранов, так что даже мгновенное открытие стола ничего не показывает.
 if [ "$act" = special ]; then
-  read -r a wsn < <(hyprctl activewindow -j | jq -r '"\(.address // "") \(.workspace.name // "")"')
-  f="$state/$a"
-  if [ -n "$a" ] && [ "$wsn" = special:minimized ] && { [ ! -e "$f" ] || [ $(( $(date +%s) - $(stat -c %Y "$f") )) -ge 2 ]; }; then
-    exec "$0" restore "$a"
-  fi
   d "hl.dsp.focus({ monitor = \"$arg\" })"
   d 'hl.dsp.workspace.toggle_special("minimized")'
   ws=$(hyprctl monitors -j | jq -r --arg m "$arg" '.[] | select(.name == $m) | .activeWorkspace.id')
@@ -43,6 +38,7 @@ w="address:$addr"
 # анимация «засасывания» в док: на время свернуть/вернуть движение и прозрачность окна идут по своим кривым
 # (serpMinIn/serpMinOut из hypr/modules/animations.lua), потом возвращаются обычные — как в animations.lua
 ANIM=0.36
+OFF=-30000   # «за экраном»: туда ставятся свёрнутые окна
 anim() {   # in | out | off | default
   case "$1" in
     in|out) local c=serpMin${1^}
@@ -79,7 +75,11 @@ minimize() {
   else
     d "hl.dsp.focus({ workspace = \"$ws\" })"                     # стол пуст — снять фокус с невидимого окна
   fi
+  # за пределы всех экранов (мгновенно) — тогда скрытый стол, даже если Hyprland на миг его покажет, пуст
+  anim off
+  geom "$addr" "$OFF" "$OFF" "$tw" "$th"
   d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
+  geom "$addr" "$OFF" "$OFF" "$tw" "$th"
   anim default
 }
 
@@ -106,7 +106,7 @@ restore() {
   else
     # свёрнуто до этой версии (без записи) — просто вернуть
     d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
-    [ -n "$x" ] && geom "$addr" "$x" "$y" "$ww" "$hh"
+    if [ -n "$x" ]; then geom "$addr" "$x" "$y" "$ww" "$hh"; else d "hl.dsp.window.center({ window = \"$w\" })"; fi
     d "hl.dsp.focus({ window = \"$w\" })"
     d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
   fi

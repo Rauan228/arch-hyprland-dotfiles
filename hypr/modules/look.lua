@@ -19,6 +19,8 @@ hl.config({
         rounding_power = 2,
         active_opacity   = 1.0,
         inactive_opacity = 1.0,
+        -- скрытый стол special:minimized (свёрнутые окна) иногда на миг открывается — без затемнения экрана
+        dim_special = 0,
         shadow = {
             enabled      = true,
             range        = 4,
