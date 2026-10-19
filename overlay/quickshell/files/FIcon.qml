@@ -41,6 +41,7 @@ Item {
         computer: '<rect x="3.5" y="4.5" width="17" height="11.5" rx="1.8"/><path d="M8.5 20h7M12 16v4"/>',
         drive: '<rect x="3.5" y="7" width="17" height="10" rx="2"/><path d="M16.5 12h.01M13.5 12h.01" stroke-width="2.4"/>',
         usb: '<rect x="7" y="9" width="10" height="12" rx="2"/><path d="M9 9V3.5h6V9M10.8 6h.01M13.2 6h.01"/>',
+        archive: '<rect x="4" y="4.5" width="16" height="15" rx="2"/><path d="M12 4.5v3M12 9.5v2M12 13.5v2M10.5 15.5h3"/>',
         eject: '<path d="M12 5l7 8H5z"/><path d="M5 18.5h14"/>',
         open: '<path d="M13.5 4.5h6v6M19.5 4.5 11 13"/><path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
         min: '<path d="M5.5 12h13"/>',

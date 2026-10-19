@@ -324,6 +324,17 @@ Scope {
             runOp([kind === "mkdir" ? "mkdir" : "touch", path, v.trim()], function(o) { if (o.ok) { pendingSelect = o.path; refresh(); } else say("Ошибка: " + o.error); });
         });
     }
+    // ---------- архивы ----------
+    function isArchive(n) { return /\.(zip|7z|rar|tar|tgz|txz|tbz2|gz|xz|bz2|zst|cab|iso|jar|apk)$/i.test(n); }
+    function archive(fmt) {
+        var ps = selPaths.slice(); if (!ps.length) return;
+        say("Архивирование…");
+        runOp(["archive", fmt].concat(ps), function(o) { if (o.ok) { pendingSelect = o.path; refresh(); say("Архив создан"); } else say("Ошибка: " + o.error); });
+    }
+    function extract(p) {
+        say("Распаковка…");
+        runOp(["extract", p], function(o) { if (o.ok) { pendingSelect = o.path; refresh(); say("Распаковано"); } else say("Ошибка: " + o.error); });
+    }
     function rename() {
         var r = focusRow; if (!r || page === "trash") return;
         dialog.show("Переименовать", "Новое имя:", r.name, "Переименовать", false, function(v) {
@@ -1117,6 +1128,9 @@ Scope {
         }
         if (r) it.push({ label: "Открыть", icon: "open", key: "Enter", act: function() { openRow(r) } });
         if ((page === "search" || page === "quick") && r) it.push({ label: "Показать в папке", icon: "folder", act: function() { fm.pendingSelect = r.path; go("folder", r.path.substring(0, r.path.lastIndexOf("/")) || "/") } });
+        if (r && !r.isdir && isArchive(r.name)) it.push({ label: "Извлечь сюда", icon: "archive", act: function() { extract(r.path) } });
+        if (n) it.push({ label: "Добавить в архив ZIP", icon: "archive", act: function() { archive("zip") } });
+        if (n) it.push({ label: "Добавить в архив 7z", icon: "archive", act: function() { archive("7z") } });
         it.push({ sep: true });
         it.push({ label: "Вырезать", icon: "cut", key: "Ctrl+X", act: function() { setClip("move") } });
         it.push({ label: "Копировать", icon: "copy", key: "Ctrl+C", act: function() { setClip("copy") } });

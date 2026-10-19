@@ -10,6 +10,8 @@
   settags PATH "a,b"  |  setnote PATH TEXT
   drives                         смонтированные диски (df) + неподключённые съёмные разделы (lsblk)
   mount DEV | eject DEV          подключить / извлечь съёмный диск (udisksctl, без root)
+  archive zip|7z PATH...         упаковать в архив рядом с первым файлом (7z, иначе bsdtar)
+  extract ARCHIVE                распаковать рядом: одна папка внутри — как есть, иначе в папку «имя архива»
   trashlist | restore NAME... | emptytrash
   search ROOT QUERY              рекурсивный поиск по имени (fd)
   recent [N]                     недавние файлы (~/.local/share/recently-used.xbel)
@@ -56,6 +58,24 @@ def stat_items(paths):
         except OSError:
             pass
     return res
+
+ARCH_EXT = (".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tgz", ".txz", ".tbz2", ".zip", ".7z", ".rar", ".tar", ".gz", ".xz", ".bz2", ".zst", ".cab", ".iso", ".jar", ".apk")
+
+def arch_base(name):
+    low = name.lower()
+    for e in ARCH_EXT:
+        if low.endswith(e):
+            return name[:-len(e)] or name
+    return name
+
+def sevenzip():
+    return shutil.which("7z") or shutil.which("7zz") or shutil.which("7za")
+
+def arch_error(r):
+    t = (r.stderr + r.stdout).lower()
+    if "password" in t or "encrypted" in t or "passphrase" in t:
+        return "Архив защищён паролем"
+    return (r.stderr.strip() or r.stdout.strip()).splitlines()[-1] if (r.stderr.strip() or r.stdout.strip()) else "ошибка архиватора"
 
 def main():
     a = sys.argv[1:]
@@ -180,6 +200,44 @@ def main():
             disk = subprocess.run(["lsblk", "-no", "PKNAME", "-p", a[1]], capture_output=True, text=True).stdout.strip() or a[1]
             subprocess.run(["udisksctl", "power-off", "-b", disk, "--no-user-interaction"], capture_output=True, text=True)
             return out({"ok": True})
+        if cmd == "archive":
+            fmt, paths = a[1], [p.rstrip("/") for p in a[2:]]
+            parent = os.path.dirname(os.path.abspath(paths[0]))
+            name = os.path.basename(paths[0]) if len(paths) == 1 else os.path.basename(parent) or "Архив"
+            target = os.path.join(parent, unique(parent, arch_base(name) + "." + fmt))
+            rel = [os.path.relpath(os.path.abspath(p), parent) for p in paths]
+            z = sevenzip()
+            if z:
+                r = subprocess.run([z, "a", "-t" + fmt, "-y", "-bd", target, "--"] + rel, cwd=parent, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            else:
+                r = subprocess.run(["bsdtar", "-a", "-cf", target, "--"] + rel, cwd=parent, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            if r.returncode != 0:
+                if os.path.exists(target): os.remove(target)
+                return out({"ok": False, "error": arch_error(r)})
+            return out({"ok": True, "path": target})
+        if cmd == "extract":
+            arc = os.path.abspath(a[1])
+            parent = os.path.dirname(arc)
+            tmp = os.path.join(parent, unique(parent, ".extracting-" + os.path.basename(arc)))
+            os.mkdir(tmp)
+            z = sevenzip()
+            if z:
+                r = subprocess.run([z, "x", "-y", "-bd", "-p-nopass-", "-o" + tmp, "--", arc], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            else:
+                r = subprocess.run(["bsdtar", "-xf", arc, "-C", tmp], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            items = os.listdir(tmp)
+            if r.returncode != 0 or not items:
+                shutil.rmtree(tmp, ignore_errors=True)
+                if not z and arc.lower().endswith(".rar"):
+                    return out({"ok": False, "error": "Для этого RAR нужен 7-Zip: sudo pacman -S 7zip"})
+                return out({"ok": False, "error": arch_error(r) if r.returncode != 0 else "Архив пуст"})
+            if len(items) == 1:                              # внутри одна папка/файл — кладём рядом как есть
+                target = os.path.join(parent, unique(parent, items[0]))
+                os.rename(os.path.join(tmp, items[0]), target); os.rmdir(tmp)
+            else:
+                target = os.path.join(parent, unique(parent, arch_base(os.path.basename(arc))))
+                os.rename(tmp, target)
+            return out({"ok": True, "path": target})
         if cmd == "trashlist":
             base = os.path.expanduser("~/.local/share/Trash")
             items = []
