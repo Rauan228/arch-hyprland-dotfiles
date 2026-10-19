@@ -94,6 +94,8 @@ put("General", RememberOpenedTabs="true", ShowFullPath="true", ShowFullPathInTit
     ShowSelectionToggle="true", ConfirmClosingMultipleTabs="false", OpenExternallyCalledFolderInNewTab="true",
     ShowStatusBar="FullWidth", ShowZoomSlider="true", GlobalViewProps="true", UseTabForSwitchingSplitView="true")
 put("MainWindow", MenuBar="Disabled")
+# своя схема окна Dolphin (меню «Цветовая схема»): без неё вне Plasma он ставит светлую Breeze поверх qt6ct
+put("UiSettings", ColorScheme="Serpantinum")
 put("PreviewSettings", Plugins="appimagethumbnail,audiothumbnail,comicbookthumbnail,cursorthumbnail,djvuthumbnail,ebookthumbnail,exrthumbnail,directorythumbnail,fontthumbnail,imagethumbnail,jpegthumbnail,kraorathumbnail,windowsexethumbnail,windowsimagethumbnail,opendocumentthumbnail,svgthumbnail,ffmpegthumbs")
 put("DetailsMode", PreviewSize="22", IconSize="22")
 put("IconsMode", PreviewSize="80", IconSize="64")
