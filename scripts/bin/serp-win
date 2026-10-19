@@ -1,24 +1,59 @@
 #!/usr/bin/env bash
-# serp-win <min|max|close|restore> [монитор] — действия с окном для кнопок верхней панели.
-# Окно = последнее сфокусированное окно на активном рабочем столе указанного монитора
-# (если монитор не указан — активное окно). Данные берутся из hyprctl в момент нажатия.
+# serp-win <min|restore|max|close> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
+# Окно: 0xADDR — это окно; имя монитора — последнее сфокусированное окно на его рабочем столе; иначе — активное.
+#   min      свернуть как в Windows: окно уходит в скрытый special:minimized, запоминается, с какого
+#            рабочего стола оно ушло, а фокус переходит на следующее окно под ним (а не остаётся на невидимом)
+#   restore  вернуть свёрнутое туда же, откуда свернули (тот же стол и место), поверх остальных и с фокусом
 set -euo pipefail
-act="${1:-}"; mon="${2:-}"
+act="${1:-}"; arg="${2:-}"
+state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"; mkdir -p "$state"
+d() { hyprctl dispatch "$1" >/dev/null; }
 
-if [ -n "$mon" ]; then
-  ws=$(hyprctl monitors -j | jq -r --arg m "$mon" '.[] | select(.name == $m) | .activeWorkspace.id')
-  [ -n "$ws" ] || exit 1
-  addr=$(hyprctl clients -j | jq -r --argjson ws "$ws" \
-    '[.[] | select(.workspace.id == $ws and .mapped and (.hidden | not))] | sort_by(.focusHistoryID) | .[0].address // empty')
-else
-  addr=$(hyprctl activewindow -j | jq -r '.address // empty')
-fi
+clients=$(hyprctl clients -j)
+case "$arg" in
+  0x*) addr="$arg" ;;
+  ?*)  ws=$(hyprctl monitors -j | jq -r --arg m "$arg" '.[] | select(.name == $m) | .activeWorkspace.id')
+       [ -n "$ws" ] || exit 1
+       addr=$(jq -r --argjson ws "$ws" '[.[] | select(.workspace.id == $ws and .mapped and (.hidden | not))]
+                                        | sort_by(.focusHistoryID) | .[0].address // empty' <<<"$clients") ;;
+  *)   addr=$(hyprctl activewindow -j | jq -r '.address // empty') ;;
+esac
 [ -n "$addr" ] || exit 0
 w="address:$addr"
 
+minimize() {
+  local ws next
+  ws=$(jq -r --arg a "$addr" '.[] | select(.address == $a) | .workspace.id' <<<"$clients")
+  [ -n "$ws" ] || return 0
+  [ "$ws" -lt 0 ] && return 0                                    # уже свёрнуто
+  echo "$ws" > "$state/$addr"
+  d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
+  # фокус — следующему окну на том же столе (по истории фокуса), как в Windows
+  next=$(jq -r --arg a "$addr" --argjson ws "$ws" '[.[] | select(.address != $a and .workspace.id == $ws and .mapped and (.hidden | not))]
+                                                   | sort_by(.focusHistoryID) | .[0].address // empty' <<<"$clients")
+  if [ -n "$next" ]; then
+    d "hl.dsp.focus({ window = \"address:$next\" })"
+  else
+    d "hl.dsp.focus({ workspace = \"$ws\" })"                     # стол пуст — снять фокус с невидимого окна
+  fi
+}
+
+restore() {
+  local ws
+  ws=$(cat "$state/$addr" 2>/dev/null || true); rm -f "$state/$addr"
+  # стол, с которого свернули, — если он ещё есть; иначе текущий
+  if [ -z "$ws" ] || ! hyprctl workspaces -j | jq -e --argjson ws "$ws" 'any(.[]; .id == $ws)' >/dev/null; then
+    ws=$(hyprctl activeworkspace -j | jq -r '.id')
+  fi
+  d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
+  d "hl.dsp.focus({ window = \"$w\" })"
+  d "hl.dsp.window.bring_to_top({ window = \"$w\" })" 2>/dev/null || true
+}
+
 case "$act" in
-  min)   hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })" ;;
-  max)   exec "$(dirname "$0")/serp-max" toggle "$addr" ;;   # развернуть как в Windows (окно остаётся плавающим)
-  close) hyprctl dispatch "hl.dsp.window.close({ window = \"$w\" })" ;;
-  *) echo "usage: serp-win min|max|close [monitor]" >&2; exit 2 ;;
-esac >/dev/null
+  min)     minimize ;;
+  restore) restore ;;
+  max)     exec "$(dirname "$0")/serp-max" toggle "$addr" ;;     # развернуть как в Windows (окно остаётся плавающим)
+  close)   d "hl.dsp.window.close({ window = \"$w\" })" ;;
+  *) echo "usage: serp-win min|restore|max|close [monitor|0xADDR]" >&2; exit 2 ;;
+esac
