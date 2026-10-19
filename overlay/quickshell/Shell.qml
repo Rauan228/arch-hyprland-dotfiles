@@ -9,7 +9,6 @@ import Quickshell.Hyprland
 import "taskmgr"
 import "snip"
 import "apps"
-import "files"
 import "switcher"
 
 ShellRoot {
@@ -72,6 +71,5 @@ ShellRoot {
     TaskManager {}
     Snip {}
     AppLauncher {}
-    FileManager {}
     Switcher {}
 }

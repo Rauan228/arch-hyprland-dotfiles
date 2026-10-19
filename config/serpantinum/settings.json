@@ -151,9 +151,9 @@
         "icon": "kitty"
       },
       {
-        "name": "Диспетчер файлов",
+        "name": "Проводник",
         "comment": "Файлы и папки",
-        "desktop_id": "serp-files",
+        "desktop_id": "org.kde.dolphin",
         "icon": "system-file-manager"
       }
     ],

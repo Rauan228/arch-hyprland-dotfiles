@@ -35,7 +35,6 @@ var byId = {
     "code": "Редактор кода",
     "kitty": "Терминал",
     "org.kde.dolphin": "Проводник KDE",
-    "serp-files": "Проводник",
     "thunar": "Файловый менеджер",
     "thunar-bulk-rename": "Массовое переименование",
     "thunar-settings": "Настройки Thunar",

@@ -25,13 +25,14 @@ hl.window_rule({
     center = true,
 })
 
--- Диспетчер файлов Serpantinum (Win+E)
+-- Проводник Dolphin (Win+E): плавающее окно по центру, лёгкое стекло с размытием
 hl.window_rule({
-    name  = "serp-files",
-    match = { title = "^Диспетчер файлов$" },
+    name  = "dolphin",
+    match = { class = "^org\\.kde\\.dolphin$" },
     float = true,
     size  = "monitor_w*0.84 monitor_h*0.9",
     center = true,
+    opacity = "0.94 0.9",
 })
 
 -- Терминал Ctrl+Shift+Esc

@@ -1,6 +1,6 @@
 local mainMod     = "SUPER"
 local terminal    = "kitty"
-local fileManager = "$HOME/.config/serpantinum/bin/serp-files"   -- «Диспетчер файлов» Serpantinum
+local fileManager = "dolphin"   -- проводник: Dolphin в оформлении Serpantinum (scripts/setup-filemanager.sh)
 local serp        = "$HOME/.config/serpantinum/bin/serp"
 local menu        = serp .. " toggle launcher" -- меню приложений (оригинальный лаунчер Serpantinum)
 
