@@ -1,0 +1,282 @@
+diff --git a/hyprbars/barDeco.cpp b/hyprbars/barDeco.cpp
+index c27653d..fa4d50b 100644
+--- a/hyprbars/barDeco.cpp
++++ b/hyprbars/barDeco.cpp
+@@ -151,7 +151,7 @@ void CHyprBar::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
+ 
+ void CHyprBar::onMouseMove(Vector2D coords) {
+     // ensure proper redraws of button icons on hover when using hardware cursors
+-    if (g_pGlobalState->config.iconOnHover->value())
++    if (g_pGlobalState->config.iconOnHover->value() || g_pGlobalState->config.buttonStyle->value() == "windows")
+         damageOnButtonHover();
+ 
+     if (!m_bDragPending || m_bTouchEv || !validMapped(m_pWindow) || m_touchId != 0)
+@@ -277,6 +277,15 @@ void CHyprBar::handleMovement() {
+ }
+ 
+ bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButtonPadding, Config::INTEGER barHeight, Vector2D COORDS, const bool BUTTONSRIGHT) {
++    if (g_pGlobalState->config.buttonStyle->value() == "windows") {
++        const int i = windowsButtonAt(COORDS);
++        if (i >= 0) {
++            g_pKeybindManager->m_dispatchers["exec"](g_pGlobalState->buttons[i].cmd);
++            return true;
++        }
++        return false;
++    }
++
+     //check if on a button
+     float offset = barPadding;
+ 
+@@ -340,7 +349,42 @@ size_t CHyprBar::getVisibleButtonCount(Config::INTEGER barButtonPadding, Config:
+     return count;
+ }
+ 
++// Serpantinum: какая кнопка (стиль windows) под курсором; -1 — никакая. Кнопки справа налево, во всю высоту.
++int CHyprBar::windowsButtonAt(const Vector2D& coords) {
++    const auto HEIGHT = g_pGlobalState->config.barHeight->value();
++    const auto W      = assignedBoxGlobal().w;
++    if (coords.y < 0 || coords.y >= HEIGHT)
++        return -1;
++    float right = W;
++    for (size_t i = 0; i < g_pGlobalState->buttons.size(); ++i) {
++        const auto& b = g_pGlobalState->buttons[i];
++        if (coords.x >= right - b.size && coords.x < right)
++            return (int)i;
++        right -= b.size;
++    }
++    return -1;
++}
++
+ void CHyprBar::renderBarButtons(CBox* barBox, const float scale, const float a) {
++    if (g_pGlobalState->config.buttonStyle->value() == "windows") {
++        // плоские ячейки во всю высоту; фон (цвет кнопки) — только у кнопки под курсором
++        const int hovered = windowsButtonAt(cursorRelativeToBar());
++        float     right   = barBox->x + barBox->w;
++        for (size_t i = 0; i < g_pGlobalState->buttons.size(); ++i) {
++            auto&      button = g_pGlobalState->buttons[i];
++            const auto w      = button.size * scale;
++            if ((int)i == hovered) {
++                auto color = button.bgcol;
++                color.a *= a;
++                CBox box = {right - w, barBox->y, w, barBox->h};
++                box.round();
++                g_pHyprOpenGL->renderRect(box, color, {});
++            }
++            right -= w;
++        }
++        return;
++    }
++
+     const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
+     const auto BARPADDING       = g_pGlobalState->config.barPadding->value();
+     const auto ALIGNBUTTONS     = g_pGlobalState->config.barButtonsAlignment->value();
+@@ -377,6 +421,37 @@ void CHyprBar::renderBarButtons(CBox* barBox, const float scale, const float a)
+ }
+ 
+ void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float a) {
++    if (g_pGlobalState->config.buttonStyle->value() == "windows") {
++        const auto H       = g_pGlobalState->config.barHeight->value();
++        const auto INACTIVE = g_pGlobalState->config.inactiveButtonColor->value();
++        const int  hovered = windowsButtonAt(cursorRelativeToBar());
++        float      right   = barBox->x + barBox->w;
++        for (size_t i = 0; i < g_pGlobalState->buttons.size(); ++i) {
++            auto&      button = g_pGlobalState->buttons[i];
++            const auto w      = button.size * scale;
++            if (m_bButtonsDirty || m_bWindowSizeChanged)
++                button.iconTex = nullptr;
++            if ((!button.iconTex || button.iconTex->m_texID == 0) && !button.icon.empty()) {
++                auto fg = button.userfg ? button.fgcol : CHyprColor(0xFFFFFFFF);
++                if (INACTIVE > 0 && !m_bWindowHasFocus)
++                    fg = configColor(INACTIVE);
++                button.iconTex = g_pHyprRenderer->renderText(button.icon, fg, std::round(H * 0.42 * scale), false, "Noto Sans", w);
++            }
++            if (button.iconTex && button.iconTex->m_texID != 0) {
++                CBox pos = {right - w / 2.0 - button.iconTex->m_size.x / 2.0, barBox->y + barBox->h / 2.0 - button.iconTex->m_size.y / 2.0, button.iconTex->m_size.x,
++                            button.iconTex->m_size.y};
++                g_pHyprOpenGL->renderTexture(button.iconTex, pos, {.a = a});
++            }
++            right -= w;
++            const bool bit = (m_iButtonHoverState & (1 << i)) != 0;
++            if (((int)i == hovered) != bit) {
++                m_iButtonHoverState ^= (1 << i);
++                damageEntire();
++            }
++        }
++        return;
++    }
++
+     const auto HEIGHT           = g_pGlobalState->config.barHeight->value();
+     const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
+     const auto BARPADDING       = g_pGlobalState->config.barPadding->value();
+@@ -665,6 +740,17 @@ void CHyprBar::updateRules() {
+ }
+ 
+ void CHyprBar::damageOnButtonHover() {
++    if (g_pGlobalState->config.buttonStyle->value() == "windows") {
++        const int  hovered = windowsButtonAt(cursorRelativeToBar());
++        const bool any     = hovered >= 0;
++        if (any != m_bButtonHovered || (any && m_iLastHoveredButton != hovered)) {
++            m_bButtonHovered     = any;
++            m_iLastHoveredButton = hovered;
++            damageEntire();
++        }
++        return;
++    }
++
+     const auto BARPADDING       = g_pGlobalState->config.barPadding->value();
+     const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
+     const auto HEIGHT           = g_pGlobalState->config.barHeight->value();
+diff --git a/hyprbars/barDeco.hpp b/hyprbars/barDeco.hpp
+index a3b4e2d..6abffab 100644
+--- a/hyprbars/barDeco.hpp
++++ b/hyprbars/barDeco.hpp
+@@ -82,6 +82,7 @@ class CHyprBar : public IHyprWindowDecoration {
+     void renderBarButtons(CBox* barBox, const float scale, const float a);
+     void renderBarButtonsText(CBox* barBox, const float scale, const float a);
+     void damageOnButtonHover();
++    int  windowsButtonAt(const Vector2D& coords);   // Serpantinum: стиль кнопок windows
+ 
+     bool inputIsValid();
+     void onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e);
+@@ -114,6 +115,7 @@ class CHyprBar : public IHyprWindowDecoration {
+ 
+     // store hover state for buttons as a bitfield
+     unsigned int m_iButtonHoverState = 0;
++    int          m_iLastHoveredButton = -1;
+ 
+     // for dynamic updates
+     int    m_iLastHeight = 0;
+diff --git a/hyprbars/globals.hpp b/hyprbars/globals.hpp
+index 0ef19ae..1792d5a 100644
+--- a/hyprbars/globals.hpp
++++ b/hyprbars/globals.hpp
+@@ -38,6 +38,9 @@ struct SGlobalState {
+         SP<Config::Values::CIntValue>        barButtonPadding;
+         SP<Config::Values::CBoolValue>       barBlur, barTitleEnabled, barPartOfWindow, barPrecedenceOverBorder, enabled, iconOnHover;
+         SP<Config::Values::CStringValue>     barTextFont, barTextAlign, barButtonsAlignment, onDoubleClick;
++        // Serpantinum: button_style = "windows" — плоские кнопки во всю высоту справа с подсветкой при наведении;
++        // snap_command — команда для «прилипания» окон при перетаскивании (Aero Snap)
++        SP<Config::Values::CStringValue>     buttonStyle, snapCommand;
+     } config;
+ };
+ 
+diff --git a/hyprbars/main.cpp b/hyprbars/main.cpp
+index ae9c90b..b55935f 100644
+--- a/hyprbars/main.cpp
++++ b/hyprbars/main.cpp
+@@ -14,6 +14,10 @@
+ #include <hyprland/src/config/lua/bindings/LuaBindingsInternal.hpp>
+ #include <hyprland/src/config/lua/types/LuaConfigColor.hpp>
+ #include <hyprland/src/state/MonitorState.hpp>
++#include <hyprland/src/layout/LayoutManager.hpp>
++#include <hyprland/src/managers/input/InputManager.hpp>
++#include <hyprland/src/output/Monitor.hpp>
++#include <hyprland/src/config/supplementary/executor/Executor.hpp>
+ 
+ #include <hyprutils/string/VarList.hpp>
+ 
+@@ -27,6 +31,83 @@ extern "C" {
+ #include <lauxlib.h>
+ }
+ 
++// ---------- Serpantinum: прилипание окон при перетаскивании (Aero Snap) ----------
++// Пока окно тащат (любым способом), смотрим, где курсор: у внешнего края монитора → зона.
++// Смена зоны → `<snap_command> preview <зона> <монитор>`, отпустили в зоне → `<snap_command> drop <зона> <монитор> <окно>`.
++// Зоны: left, right, max (верх), tl, tr, bl, br (углы). Края между мониторами зонами не считаются.
++static std::string g_snapZone, g_snapMon, g_snapWin;
++static bool        g_snapDragging = false;
++
++static bool pointOnAnyMonitor(const Vector2D& p) {
++    for (auto& m : State::monitorState()->monitors())
++        if (m->logicalBox().containsPoint(p))
++            return true;
++    return false;
++}
++
++static std::string snapZoneAt(const Vector2D& c, std::string& monName) {
++    for (auto& m : State::monitorState()->monitors()) {
++        const auto box = m->logicalBox();
++        if (!box.containsPoint(c))
++            continue;
++        monName           = m->m_name;
++        const double T    = 3;    // насколько близко к краю
++        const double C    = 100;  // размер угловой зоны
++        const bool   outL = !pointOnAnyMonitor({box.x - 4, c.y}), outR = !pointOnAnyMonitor({box.x + box.w + 4, c.y});
++        const bool   outT = !pointOnAnyMonitor({c.x, box.y - 4}), outB = !pointOnAnyMonitor({c.x, box.y + box.h + 4});
++        const bool   l = outL && c.x <= box.x + T, r = outR && c.x >= box.x + box.w - 1 - T;
++        const bool   t = outT && c.y <= box.y + T, b = outB && c.y >= box.y + box.h - 1 - T;
++        const bool   nl = c.x <= box.x + C, nr = c.x >= box.x + box.w - C, nt = c.y <= box.y + C, nb = c.y >= box.y + box.h - C;
++        if ((l && nt) || (t && nl && outL)) return "tl";
++        if ((r && nt) || (t && nr && outR)) return "tr";
++        if ((l && nb) || (b && nl && outL)) return "bl";
++        if ((r && nb) || (b && nr && outR)) return "br";
++        if (l) return "left";
++        if (r) return "right";
++        if (t) return "max";
++        return "";
++    }
++    return "";
++}
++
++static void snapRun(const std::string& args) {
++    const auto CMD = g_pGlobalState->config.snapCommand->value();
++    if (!CMD.empty())
++        Config::Supplementary::executor()->spawn(CMD + " " + args);
++}
++
++static void snapOnMouseMove(const Vector2D& coords) {
++    if (g_pGlobalState->config.snapCommand->value().empty())
++        return;
++    const auto& DRAG = g_layoutManager->dragController();
++    if (!DRAG || DRAG->mode() != MBIND_MOVE || !DRAG->target() || !DRAG->target()->window()) {
++        return;
++    }
++    const auto PWINDOW = DRAG->target()->window();
++    g_snapDragging     = true;
++    g_snapWin          = std::format("0x{:x}", (uintptr_t)PWINDOW.get());
++    std::string mon;
++    const auto  zone = snapZoneAt(g_pInputManager->getMouseCoordsInternal(), mon);
++    if (zone != g_snapZone || (!zone.empty() && mon != g_snapMon)) {
++        g_snapZone = zone;
++        g_snapMon  = mon;
++        snapRun("preview " + (zone.empty() ? std::string("none") : zone) + " " + (mon.empty() ? std::string("-") : mon));
++    }
++}
++
++static void snapOnMouseButton(IPointer::SButtonEvent e) {
++    if (e.state == WL_POINTER_BUTTON_STATE_PRESSED || !g_snapDragging)
++        return;
++    if (!g_snapZone.empty())
++        snapRun("drop " + g_snapZone + " " + g_snapMon + " " + g_snapWin);
++    else
++        snapRun("preview none -");
++    g_snapDragging = false;
++    g_snapZone.clear();
++    g_snapMon.clear();
++    g_snapWin.clear();
++}
++
+ // Do NOT change this function.
+ APICALL EXPORT std::string PLUGIN_API_VERSION() {
+     return HYPRLAND_API_VERSION;
+@@ -232,6 +313,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+     g_pGlobalState->config.enabled             = makeShared<Config::Values::CBoolValue>("plugin:hyprbars:enabled", "Whether bars are enabled", true);
+     g_pGlobalState->config.iconOnHover         = makeShared<Config::Values::CBoolValue>("plugin:hyprbars:icon_on_hover", "Whether to use an icon on hover of the buttons", false);
+     g_pGlobalState->config.onDoubleClick       = makeShared<Config::Values::CStringValue>("plugin:hyprbars:on_double_click", "Action to execute on double click of the bar", "");
++    g_pGlobalState->config.buttonStyle  = makeShared<Config::Values::CStringValue>("plugin:hyprbars:button_style", "Button style: circle or windows", "circle");
++    g_pGlobalState->config.snapCommand  = makeShared<Config::Values::CStringValue>("plugin:hyprbars:snap_command", "Command for edge snapping while dragging (empty = off)", "");
+ 
+     HyprlandAPI::addConfigValueV2(PHANDLE, g_pGlobalState->config.barColor);
+     HyprlandAPI::addConfigValueV2(PHANDLE, g_pGlobalState->config.textColor);
+@@ -251,6 +334,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+     HyprlandAPI::addConfigValueV2(PHANDLE, g_pGlobalState->config.enabled);
+     HyprlandAPI::addConfigValueV2(PHANDLE, g_pGlobalState->config.iconOnHover);
+     HyprlandAPI::addConfigValueV2(PHANDLE, g_pGlobalState->config.onDoubleClick);
++    HyprlandAPI::addConfigValueV2(PHANDLE, g_pGlobalState->config.buttonStyle);
++    HyprlandAPI::addConfigValueV2(PHANDLE, g_pGlobalState->config.snapCommand);
++
++    static auto PSNAP1 = Event::bus()->m_events.input.mouse.move.listen([](Vector2D c, Event::SCallbackInfo&) { snapOnMouseMove(c); });
++    static auto PSNAP2 = Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo&) { snapOnMouseButton(e); });
+ 
+     if (Config::mgr()->type() == Config::CONFIG_LEGACY)
+         HyprlandAPI::addConfigKeyword(PHANDLE, "plugin:hyprbars:hyprbars-button", onNewButton, Hyprlang::SHandlerOptions{});
