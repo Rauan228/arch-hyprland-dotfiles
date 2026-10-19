@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# serp-shot [area|full] — скриншоты как в Windows.
+#   area (PrtSc, Win+Shift+S): замороженный экран, выделение, рисование, копировать/сохранить (как Lightshot)
+#   full (Shift+PrtSc, Win+PrtSc): весь текущий монитор сразу в буфер обмена и в ~/Pictures/Screenshots
+set -u
+mode="${1:-area}"
+main="$HOME/.local/share/serpantinum/runtime/quickshell/Shell.qml"
+dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/snip"
+mkdir -p "$dir"
+
+if [ "$mode" = full ]; then
+  out="$HOME/Pictures/Screenshots"; mkdir -p "$out"
+  mon=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
+  f="$out/Скриншот $(date '+%Y-%m-%d %H-%M-%S').png"
+  grim -o "$mon" "$f" || exit 1
+  wl-copy --type image/png < "$f"
+  notify-send -a "Скриншот" -i "$f" "Снимок экрана сохранён и скопирован" "$(basename "$f")"
+  exit 0
+fi
+
+rm -f "$dir"/*.png
+for m in $(hyprctl monitors -j | jq -r '.[].name'); do
+  grim -o "$m" "$dir/$m.png" &
+done
+wait
+exec quickshell -p "$main" ipc call snip start "$dir"
