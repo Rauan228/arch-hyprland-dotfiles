@@ -87,7 +87,7 @@ case "$cmd" in
   down) a=$(active); [ -n "$a" ] || exit 0
         read -r x y w h fs mon < <(info "$a")
         if [ -f "$dir/$a" ] || [ "$fs" = 1 ]; then exec "$here/serp-max" restore "$a"
-        else d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"address:$a\", silent = true })"; fi ;;
+        else exec "$here/serp-win" min "$a"; fi ;;   # свернуть как кнопкой «─» (фокус, анимация, место)
   zone) z=$2; a="${3:-$(active)}"; m="${4:-}"; [ -n "$a" ] || exit 0
         [ -n "$m" ] && m=$(monid "$m")
         zone "$z" "$a" "$m" ;;
