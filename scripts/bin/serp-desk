@@ -36,26 +36,12 @@ go() {
   indicator
 }
 
-# после переноса окна Hyprland переключает монитор вслед за ним, если на столе больше не осталось окон
-# (даже при silent) — вернуть все мониторы на стол $1 мгновенно, без анимации и без индикатора
-stay() {
-  local c=$1 fm m want
-  fm=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
-  hyprctl monitors -j | jq -e --argjson c "$c" 'all(.[]; .activeWorkspace.id % 100 == $c)' >/dev/null && return 0
-  hyprctl eval "hl.animation({ leaf = 'workspaces', enabled = false })" >/dev/null
-  for m in $(hyprctl monitors -j | jq -r '.[] | select(.focused | not) | .name') "$fm"; do
-    want=$(( $(base "$m") + c ))
-    [ "$(hyprctl monitors -j | jq -r --arg m "$m" '.[] | select(.name == $m) | .activeWorkspace.id')" = "$want" ] || d "hl.dsp.focus({ workspace = \"$want\" })"
-  done
-  hyprctl eval "hl.animation({ leaf = 'workspaces', enabled = true, speed = 3, bezier = 'deskSlide', style = 'slide' })" >/dev/null
-}
-
 # перенести все окна стола $1 на стол $2 (каждое остаётся на своём мониторе)
 shift_desk() {
   local from=$1 to=$2
   hyprctl clients -j | jq -r --argjson f "$from" '.[] | select(.workspace.id > 0 and (.workspace.id % 100) == $f) | "\(.address) \(.workspace.id)"' |
   while read -r a id; do
-    d "hl.dsp.window.move({ workspace = \"$(( id - from + to ))\", window = \"address:$a\", silent = true })"
+    d "hl.dsp.window.move({ workspace = \"$(( id - from + to ))\", window = \"address:$a\", follow = false })"
   done
 }
 
@@ -76,7 +62,6 @@ case "$cmd" in
   move)
     n="${2:-1}"; a="${3:-$(hyprctl activewindow -j | jq -r '.address // empty')}"
     [ -n "$a" ] || exit 0
-    c=$(cur)
     mini="$state/minimized/$a"
     if [ -f "$mini" ]; then
       # свёрнутое окно остаётся свёрнутым — меняем только стол, на который оно вернётся (запись serp-win)
@@ -86,8 +71,9 @@ case "$cmd" in
     else
       mon=$(hyprctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | .monitor')
       name=$(hyprctl monitors -j | jq -r --argjson id "${mon:-0}" '.[] | select(.id == $id) | .name')
-      d "hl.dsp.window.move({ workspace = \"$(( $(base "$name") + n ))\", window = \"address:$a\", silent = true })"
-      stay "$c"   # остаёмся на своём столе, как в Windows (окно уехало, мы — нет)
+      # follow = false — окно уезжает, монитор остаётся на своём столе (как в Windows). Параметра silent в
+      # Lua-конфиге Hyprland 0.56 нет: он молча игнорировался, и монитор уезжал вслед за окном
+      d "hl.dsp.window.move({ workspace = \"$(( $(base "$name") + n ))\", window = \"address:$a\", follow = false })"
     fi
     [ "$n" -gt "$(count)" ] && setcount "$n" ;;
   carry)
