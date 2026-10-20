@@ -44,17 +44,24 @@ Scope {
         shown = true;
     }
     function toggle() { if (shown && !minimized) shown = false; else open(); }
+    // свернуть / вернуть / развернуть — как у всех окон (scripts/bin/serp-win, serp-max): фокус следующему окну,
+    // возврат на своё место, анимация; раньше окно переносилось напрямую и фокус оставался на невидимом
+    readonly property string bin: Quickshell.env("HOME") + "/.config/serpantinum/bin/"
+    function winAddr() {
+        var list = Hyprland.toplevels.values;
+        for (var i = 0; i < list.length; i++)
+            if (list[i] && list[i].title === "Диспетчер задач") return "0x" + String(list[i].address).replace(/^0x/, "");
+        return "";
+    }
     function restore() {
         minimized = false;
-        var ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1;
-        Hyprland.dispatch('hl.dsp.window.move({ workspace = "' + ws + '", window = "' + winSel + '" })');
-        Hyprland.dispatch('hl.dsp.focus({ window = "' + winSel + '" })');
+        var a = winAddr(); if (a) Quickshell.execDetached([bin + "serp-win", "restore", a]);
     }
     function minimize() {
         minimized = true;
-        Hyprland.dispatch('hl.dsp.window.move({ workspace = "special:minimized", window = "' + winSel + '", silent = true })');
+        var a = winAddr(); if (a) Quickshell.execDetached([bin + "serp-win", "min", a]);
     }
-    function toggleMaximize() { Hyprland.dispatch('hl.dsp.window.fullscreen({ mode = "maximized", action = "toggle", window = "' + winSel + '" })'); }
+    function toggleMaximize() { var a = winAddr(); if (a) Quickshell.execDetached([bin + "serp-max", "toggle", a]); }
 
     IpcHandler {
         target: "taskmgr"
