@@ -151,6 +151,15 @@ slide() {  # addr x y [opacity] — только сдвиг (и прозрачн
   hyprctl --batch "$b" >/dev/null
 }
 
+# после открытия окна фокус иногда уводит окно с другого монитора (клик по доку там, где курсор) — один раз вернуть
+keep_focus() {
+  sleep 0.15
+  local cur
+  cur=$(hyprctl activewindow -j | jq -r '.address // empty')
+  [ -n "$cur" ] && [ "$cur" != "$addr" ] && d "hl.dsp.focus({ window = \"$w\" })"
+  return 0
+}
+
 # рабочий стол = номер рабочего пространства % 100 (на каждом мониторе своё: 1, 101, 201… — scripts/bin/serp-desk)
 cur_desk() { local id; id=$(hyprctl activeworkspace -j | jq -r '.id'); [ "$id" -gt 0 ] 2>/dev/null && echo $(( id % 100 )) || echo 1; }
 goto_desk() {   # переключить стол на всех мониторах сразу, если окно не на текущем (иначе мониторы «расходятся»)
@@ -238,6 +247,7 @@ restore() {
     sleep 0.03
     anim out; slide "$addr" "$x" "$y" "${op:-1}"; sleep "$ANIM"
     anim default
+    keep_focus
   else
     # свёрнуто до этой версии (без записи) — просто вернуть
     d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
@@ -256,6 +266,7 @@ focus_win() {
   goto_desk "$ws"
   d "hl.dsp.focus({ window = \"$w\" })"
   d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
+  keep_focus
 }
 
 case "$act" in
