@@ -16,7 +16,6 @@ set -euo pipefail
 act="${1:-}"; arg="${2:-}"; arg="${arg#address:}"   # принимаем и 0xADDR, и address:0xADDR
 state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"; mkdir -p "$state"
 d() { hyprctl dispatch "$1" >/dev/null; }
-
 # special МОНИТОР — оболочка зовёт, когда на мониторе сам открылся скрытый стол свёрнутых окон
 # (Hyprland отдал фокус свёрнутому окну или программа попросила фокус — Telegram/VS Code после своего «─»).
 # Стол свёрнутых никогда не показываем и окна сами не возвращаем: только закрыть стол и вернуть фокус.
@@ -50,6 +49,16 @@ if [ "$act" = clients ]; then
   done
   hyprctl clients -j | jq -c --argjson m "$mini" 'map(if .workspace.id < 0 and $m[.address] then . + {minDesk: $m[.address]} else . end)'
   exit 0
+fi
+
+# Действия над окнами — строго по очереди: двойной клик/касание по доку запускал две команды сразу —
+# вторая сворачивала окно посреди анимации разворота и запоминала его промежуточное место (под экраном)
+# и прозрачность 0; потом окно разворачивалось невидимым «на другом мониторе». Вложенные вызовы
+# (taskbar → focus → restore через exec) уже держат блокировку — SERP_WIN_LOCKED.
+if [ -z "${SERP_WIN_LOCKED:-}" ]; then
+  exec 9>"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/serp-win.lock"
+  flock -w 5 9 || exit 0
+  export SERP_WIN_LOCKED=1
 fi
 
 if [ "$act" = taskbar ]; then
@@ -146,6 +155,7 @@ minimize() {
   [ -n "${ws:-}" ] || return 0
   [ "$ws" -lt 0 ] && return 0                                    # уже свёрнуто
   op=$(hyprctl getprop "$w" opacity -j 2>/dev/null | jq -r '.opacity // 1' 2>/dev/null); op=${op:-1}
+  awk -v o="$op" 'BEGIN { exit !(o < 0.2) }' && op=1                 # «невидимую» прозрачность не запоминаем
   # куда «засасывать»: в док — окно уезжает к середине нижнего края монитора и уходит под него, растворяясь.
   # Размер окна не меняем: если сжимать, Chrome/VS Code/Telegram перерисовывают интерфейс под крошечный размер
   # и на долю секунды видно их «сломанную» вёрстку
@@ -187,6 +197,13 @@ restore() {
     ws=$(hyprctl activeworkspace -j | jq -r '.id')
   fi
   d "hl.dsp.window.set_prop({ prop = \"no_focus\", value = \"0\", window = \"$w\" })"
+  # запомненное место вне всех мониторов (испорченная запись) — по центру того монитора, где окно было
+  if [ -n "$x" ] && ! hyprctl monitors -j | jq -e --argjson x "$x" --argjson y "$y" --argjson w "$ww" --argjson h "$hh" \
+       'any(.[]; ($x + $w / 2) >= .x and ($x + $w / 2) < .x + .width / .scale and ($y + $h / 2) >= .y and ($y + $h / 2) < .y + .height / .scale)' >/dev/null; then
+    read -r x y < <(hyprctl monitors -j | jq -r --argjson tx "${tx:-0}" --argjson w "$ww" --argjson h "$hh" '
+      (map(select($tx >= .x and $tx < .x + .width / .scale)) + .)[0] | "\(.x + ((.width / .scale - $w) / 2 | floor)) \(.y + ((.height / .scale - $h) / 2 | floor))"')
+  fi
+  [ -n "$op" ] && awk -v o="$op" 'BEGIN { exit !(o < 0.2) }' && op=1
   # развёрнутому обновляем отметку, чтобы serp-maxwatch не принял возврат за перетаскивание
   mx="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed/$addr"
   [ -f "$mx" ] && touch "$mx"
