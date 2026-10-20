@@ -148,6 +148,19 @@ park() {   # addr x y — поставить свёрнутое окно за э
     [ "${cy:-0}" -ge $(( $3 - 10 )) ] && return 0
   done
 }
+settle() { # addr x y w h — после возврата убедиться, что окно ровно на своём месте и своего размера.
+           # Hyprland переносит окно со скрытого стола в следующем кадре и, если решит, что оно уехало на другой
+           # монитор, сдвигает и масштабирует его (окно вставало на второй монитор и растягивалось под него)
+  local i g
+  for i in 1 2 3 4 5; do
+    sleep 0.05
+    g=$(hyprctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+    [ "$g" = "$2 $3 $4 $5" ] && return 0
+    anim off
+    hyprctl --batch "dispatch hl.dsp.window.resize({ x = $4, y = $5, window = \"address:$1\" }) ; dispatch hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" })" >/dev/null
+    anim default
+  done
+}
 slide() {  # addr x y [opacity] — только сдвиг (и прозрачность), БЕЗ изменения размера: программа не перерисовывается
   local b="dispatch hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" })"
   [ -n "${4:-}" ] && b="$b ; dispatch hl.dsp.window.set_prop({ prop = \"opacity\", value = \"$4\", window = \"address:$1\" })"
@@ -235,11 +248,18 @@ restore() {
     d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\", silent = true })"
     geom "$addr" "$x" "$y" "$ww" "$hh" "${op:-1}"
     anim default
+    settle "$addr" "$x" "$y" "$ww" "$hh"
   elif [ -n "$tx" ]; then
     # мгновенно поставить прозрачным под доком, затем «вылететь» на прежнее место (размер не трогаем —
     # он и так прежний, программа ничего не перерисовывает)
     anim off
     d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\" })"
+    # Hyprland переносит в следующем кадре — дождаться, чтобы он не «доделал» перенос поверх нашей анимации
+    for _ in 1 2 3 4 5 6; do
+      hyprctl clients -j | jq -e --arg a "$addr" --argjson ws "$ws" 'any(.[]; .address == $a and .workspace.id == $ws)' >/dev/null && break
+      sleep 0.03
+    done
+    sleep 0.03
     # свёрнутое прежней версией (сжатием) — сначала вернуть размер, пока окно невидимо
     if ! hyprctl clients -j | jq -e --arg a "$addr" --argjson w "$ww" --argjson h "$hh" 'any(.[]; .address == $a and .size == [$w, $h])' >/dev/null; then
       geom "$addr" "$tx" "$ty" "$ww" "$hh" 0
@@ -250,6 +270,7 @@ restore() {
     sleep 0.03
     anim out; slide "$addr" "$x" "$y" "${op:-1}"; sleep "$ANIM"
     anim default
+    settle "$addr" "$x" "$y" "$ww" "$hh"
     keep_focus
   else
     # свёрнуто до этой версии (без записи) — просто вернуть
