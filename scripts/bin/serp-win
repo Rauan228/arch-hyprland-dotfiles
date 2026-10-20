@@ -27,6 +27,10 @@ if [ "$act" = special ]; then
   ws=$(hyprctl monitors -j | jq -r --arg m "$arg" '.[] | select(.name == $m) | .activeWorkspace.id')
   next=$(hyprctl clients -j | jq -r --argjson ws "${ws:-0}" '[.[] | select(.workspace.id == $ws and .mapped and (.hidden | not))]
                                                          | sort_by(.focusHistoryID) | .[0].address // empty')
+  if [ -z "$next" ]; then   # на этом мониторе окон нет — последнее окно текущего стола на любом мониторе
+    next=$(hyprctl clients -j | jq -r --argjson d "$(( ${ws:-1} % 100 ))" '[.[] | select(.workspace.id > 0 and .workspace.id % 100 == $d and .mapped)]
+                                                                   | sort_by(.focusHistoryID) | .[0].address // empty')
+  fi
   [ -n "$next" ] && d "hl.dsp.focus({ window = \"address:$next\" })"
   exit 0
 fi
@@ -91,7 +95,8 @@ w="address:$addr"
 # анимация «засасывания» в док: на время свернуть/вернуть движение и прозрачность окна идут по своим кривым
 # (serpMinIn/serpMinOut из hypr/modules/animations.lua), потом возвращаются обычные — как в animations.lua
 ANIM=0.36
-OFF=-30000   # «за экраном»: туда ставятся свёрнутые окна
+OFF_DY=3000  # «за экраном»: свёрнутые окна стоят далеко ПОД своим монитором. Не в дальнем углу (-30000):
+             # оттуда Hyprland считал окно окном другого монитора и переносил туда фокус — фокус прыгал
 anim() {   # in | out | off | default
   case "$1" in
     in|out) local c=serpMin${1^}
@@ -133,9 +138,9 @@ minimize() {
   tx=$(( mx + mw / 2 - ww / 2 )); ty=$(( my + mh + 20 ))
   echo "$ws $x $y $ww $hh $op $tx $ty $tw $th" > "$state/$addr"
   if [ "${QUIET:-0}" = 1 ]; then                                  # Win+M: сразу за экран, фокус не трогаем
-    anim off; slide "$addr" "$OFF" "$OFF"
+    anim off; slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
     d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
-    slide "$addr" "$OFF" "$OFF"; anim default
+    slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"; anim default
     return 0
   fi
   # следующее окно на том же столе (по истории фокуса) — получит фокус, как в Windows
@@ -151,9 +156,9 @@ minimize() {
   fi
   # за пределы всех экранов (мгновенно) — тогда скрытый стол, даже если Hyprland на миг его покажет, пуст
   anim off
-  slide "$addr" "$OFF" "$OFF"
+  slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
   d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
-  slide "$addr" "$OFF" "$OFF"
+  slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
   anim default
 }
 
