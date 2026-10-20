@@ -43,14 +43,16 @@ Scope {
     Process {
         id: clientsProc
         property string buf: ""
-        command: ["hyprctl", "clients", "-j"]
+        command: [Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "clients"]   // как hyprctl clients + minDesk
         stdout: SplitParser { splitMarker: ""; onRead: d => clientsProc.buf += d }
         onExited: {
             var list = []; try { list = JSON.parse(buf); } catch (e) {}
             buf = "";
             var c = sw.curDesk();
             sw.wins = list.filter(function(w) {
-                return w.mapped !== false && ((w.workspace.id > 0 && w.workspace.id % 100 === c) || w.workspace.name === "special:minimized");
+                // окна текущего рабочего стола и свёрнутые С НЕГО (как в Windows: Alt+Tab показывает только свой стол)
+                return w.mapped !== false && ((w.workspace.id > 0 && w.workspace.id % 100 === c)
+                    || (w.workspace.name === "special:minimized" && (w.minDesk === undefined || w.minDesk === c)));
             }).sort(function(a, b) { return a.focusHistoryID - b.focusHistoryID; }).map(function(w) {
                 return { address: w.address, cls: w["class"], title: w.title, minimized: w.workspace.name === "special:minimized", monitor: w.monitor,
                          ww: Math.max(1, w.size[0]), wh: Math.max(1, w.size[1]) };
