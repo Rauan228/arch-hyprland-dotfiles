@@ -391,8 +391,30 @@ Scope {
 
             // ===== Представление задач (Win+Tab) =====
             Item {
+                id: taskView
                 visible: sw.mode === "view"
                 anchors.fill: parent
+                // перетаскивание окна на другой рабочий стол (как в Windows): какое окно тащим, где курсор, над каким столом
+                property var dragWin: null
+                property real dragX: 0
+                property real dragY: 0
+                property int dropDesk: 0               // 0 — не над столом; N — стол N; count+1 — «Создать рабочий стол»
+                function deskAt(gx, gy) {
+                    for (var i = 0; i < deskRow.children.length; i++) {
+                        var it = deskRow.children[i];
+                        if (!it || it.deskN === undefined || !it.visible) continue;
+                        var p = it.mapFromItem(null, gx, gy);
+                        if (p.x >= 0 && p.y >= 0 && p.x < it.width && p.y < it.height) return it.deskN;
+                    }
+                    return 0;
+                }
+                function dropOn(gx, gy) {
+                    var n = deskAt(gx, gy), w = dragWin;
+                    dragWin = null; dropDesk = 0;
+                    if (!w || n <= 0 || n === sw.curDesk()) return;
+                    sw.deskCmd(["move", String(n), w.address], false);
+                    reloadTimer.restart();
+                }
 
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: win.s(56) }
@@ -414,8 +436,11 @@ Scope {
                             WinCard {
                                 required property var modelData
                                 required property int index
-                                w: modelData; selected: index === sw.sel; big: true; closable: true
+                                w: modelData; selected: index === sw.sel; big: true; closable: true; draggable: true
                                 width: win.s(340); height: win.s(260)
+                                opacity: taskView.dragWin && taskView.dragWin.address === modelData.address ? 0.35 : 1
+                                onDragMoved: (gx, gy) => { taskView.dragWin = modelData; taskView.dragX = gx; taskView.dragY = gy; taskView.dropDesk = taskView.deskAt(gx, gy) }
+                                onDragEnded: (gx, gy) => taskView.dropOn(gx, gy)
                                 onPicked: { var w = modelData; sw.activateLater(w); sw.close() }
                                 onHovered: sw.sel = index
                                 onCloseRequested: { Hyprland.dispatch('hl.dsp.window.close({ window = "address:' + modelData.address + '" })'); reloadTimer.restart() }
@@ -442,10 +467,14 @@ Scope {
                             Rectangle {
                                 id: dc
                                 required property var modelData
+                                readonly property int deskN: modelData.n
                                 readonly property bool cur: modelData.n === sw.curDesk()
+                                readonly property bool dropHere: taskView.dragWin !== null && taskView.dropDesk === deskN && !cur
                                 width: win.s(220); height: win.s(134); radius: win.s(14)
-                                color: dma.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05)
-                                border.width: cur ? 2 : 1; border.color: cur ? Qt.rgba(0.6, 0.62, 1, 0.9) : Qt.rgba(1, 1, 1, 0.12)
+                                color: dropHere ? Qt.rgba(0.42, 0.44, 0.95, 0.45) : (dma.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05))
+                                border.width: cur || dropHere ? 2 : 1; border.color: dropHere ? "#ffffff" : (cur ? Qt.rgba(0.6, 0.62, 1, 0.9) : Qt.rgba(1, 1, 1, 0.12))
+                                scale: dropHere ? 1.06 : 1
+                                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
                                 // значки окон стола
                                 Flow {
                                     x: win.s(14); y: win.s(14); width: parent.width - win.s(28); height: win.s(70); spacing: win.s(6); clip: true
@@ -468,8 +497,12 @@ Scope {
                             }
                         }
                         Rectangle {
+                            readonly property int deskN: (sw.desks.count || 1) + 1    // «Создать рабочий стол» — тоже цель
+                            readonly property bool dropHere: taskView.dragWin !== null && taskView.dropDesk === deskN
                             width: win.s(160); height: win.s(134); radius: win.s(14)
-                            color: nma.containsMouse ? Qt.rgba(0.42, 0.44, 0.95, 0.35) : Qt.rgba(1, 1, 1, 0.04)
+                            scale: dropHere ? 1.06 : 1
+                            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                            color: (nma.containsMouse || dropHere) ? Qt.rgba(0.42, 0.44, 0.95, 0.35) : Qt.rgba(1, 1, 1, 0.04)
                             border.width: 1; border.color: Qt.rgba(0.6, 0.62, 1, 0.5)
                             Column {
                                 anchors.centerIn: parent; spacing: win.s(8)
@@ -480,6 +513,31 @@ Scope {
                         }
                     }
                 }
+            }
+
+            // окно, которое тащим на другой рабочий стол
+            Rectangle {
+                visible: sw.mode === "view" && taskView.dragWin !== null
+                z: 20
+                width: win.s(200); height: win.s(56); radius: win.s(12)
+                x: taskView.dragX - width / 2; y: taskView.dragY - height / 2
+                color: Qt.rgba(0.16, 0.17, 0.30, 0.95); border.width: 1; border.color: Qt.rgba(0.65, 0.67, 1, 0.9)
+                Row {
+                    anchors.centerIn: parent; spacing: win.s(10)
+                    Image { width: win.s(28); height: win.s(28); sourceSize: Qt.size(56, 56); anchors.verticalCenter: parent.verticalCenter
+                            source: taskView.dragWin ? sw.iconFor(taskView.dragWin.cls) : "" }
+                    Text { width: win.s(130); elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter; color: sw.textMain
+                           font { family: sw.font; pixelSize: win.s(13) }
+                           text: taskView.dropDesk > (sw.desks.count || 1) ? "На новый рабочий стол"
+                               : taskView.dropDesk > 0 && taskView.dropDesk !== sw.curDesk() ? "На рабочий стол " + taskView.dropDesk
+                               : (taskView.dragWin ? (taskView.dragWin.title || sw.nameFor(taskView.dragWin.cls)) : "") }
+                }
+            }
+            Text {
+                visible: sw.mode === "view" && sw.wins.length > 0 && taskView.dragWin === null && (sw.desks.count || 1) >= 1
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: win.s(12) }
+                text: "Перетащите окно на рабочий стол, чтобы перенести его · правый клик — меню"
+                color: sw.textSub; font { family: sw.font; pixelSize: win.s(12) }
             }
 
             // меню окна в представлении задач: перенести на другой стол
@@ -596,8 +654,14 @@ Scope {
         property bool closable: false
         signal picked()
         signal hovered()
+        property bool justDragged: false
         signal closeRequested()
         signal menuRequested(real gx, real gy)
+        // перетаскивание карточки (Win+Tab): зажать и потащить на рабочий стол в нижней полосе
+        property bool draggable: false
+        property bool dragging: false
+        signal dragMoved(real gx, real gy)
+        signal dragEnded(real gx, real gy)
 
         Rectangle {
             anchors { fill: parent; margins: 6 }
@@ -629,8 +693,20 @@ Scope {
             }
             MouseArea {
                 id: cma; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.LeftButton | Qt.RightButton
+                property real px: 0; property real py: 0
+                cursorShape: card.dragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
                 onEntered: card.hovered()
-                onClicked: (m) => { if (m.button === Qt.RightButton) { var p = mapToItem(null, m.x, m.y); card.menuRequested(p.x, p.y); } else card.picked(); }
+                onPressed: (m) => { px = m.x; py = m.y; }
+                onPositionChanged: (m) => {
+                    if (!card.draggable || !(m.buttons & Qt.LeftButton)) return;
+                    if (!card.dragging && Math.abs(m.x - px) + Math.abs(m.y - py) > 12) card.dragging = true;
+                    if (card.dragging) { var p = mapToItem(null, m.x, m.y); card.dragMoved(p.x, p.y); }
+                }
+                onReleased: (m) => { if (card.dragging) { var p = mapToItem(null, m.x, m.y); card.dragging = false; card.justDragged = true; card.dragEnded(p.x, p.y); } }
+                onClicked: (m) => {
+                    if (card.justDragged) { card.justDragged = false; return; }
+                    if (m.button === Qt.RightButton) { var p = mapToItem(null, m.x, m.y); card.menuRequested(p.x, p.y); } else card.picked();
+                }
             }
             Rectangle {
                 visible: card.closable && (cma.containsMouse || xm.containsMouse)
