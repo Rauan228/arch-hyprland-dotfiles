@@ -16,6 +16,16 @@ set -euo pipefail
 act="${1:-}"; arg="${2:-}"; arg="${arg#address:}"   # принимаем и 0xADDR, и address:0xADDR
 state="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/minimized"; mkdir -p "$state"
 d() { hyprctl dispatch "$1" >/dev/null; }
+# minimized.json — {адрес: рабочий стол, с которого свернули}: док показывает свёрнутые только на их столе
+index() {
+  local f m='{}'
+  for f in "$state"/0x*; do
+    [ -e "$f" ] || continue
+    m=$(jq -c --arg a "$(basename "$f")" --argjson d "$(( $(cut -d' ' -f1 "$f") % 100 ))" '. + {($a): $d}' <<<"$m")
+  done
+  echo "$m" > "$state.json.tmp" && mv -f "$state.json.tmp" "$state.json"
+}
+
 # special МОНИТОР — оболочка зовёт, когда на мониторе сам открылся скрытый стол свёрнутых окон
 # (Hyprland отдал фокус свёрнутому окну или программа попросила фокус — Telegram/VS Code после своего «─»).
 # Стол свёрнутых никогда не показываем и окна сами не возвращаем: только закрыть стол и вернуть фокус.
@@ -163,6 +173,7 @@ minimize() {
   tw=$ww; th=$hh
   tx=$(( mx + mw / 2 - ww / 2 )); ty=$(( my + mh + 20 ))
   echo "$ws $x $y $ww $hh $op $tx $ty $tw $th" > "$state/$addr"
+  index
   # свёрнутое окно Hyprland сам не выбирает для фокуса (иначе он открывал скрытый стол и втягивал окна на экран)
   d "hl.dsp.window.set_prop({ prop = \"no_focus\", value = \"1\", window = \"$w\" })"
   if [ "${QUIET:-0}" = 1 ]; then                                  # Win+M: сразу за экран, фокус не трогаем
@@ -234,7 +245,7 @@ restore() {
     d "hl.dsp.focus({ window = \"$w\" })"
     d "hl.dsp.window.alter_zorder({ mode = \"top\", window = \"$w\" })"
   fi
-  rm -f "$state/$addr"
+  rm -f "$state/$addr"; index
 }
 
 focus_win() {

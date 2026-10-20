@@ -1,0 +1,63 @@
+--- a/quickshell/dock/DockWindowApps.qml	2026-10-20 17:53:40.960010620 +0500
++++ b/quickshell/dock/DockWindowApps.qml	2026-10-20 17:53:40.974568390 +0500
+@@ -1,5 +1,7 @@
+ import QtQuick
+ import Quickshell
++import Quickshell.Io
++import Quickshell.Hyprland
+ import "../"
+ 
+ DockWindowState {
+@@ -11,6 +13,25 @@
+     property var runningInfoMap: ({})
+     property int runningInfoRevision: 0
+ 
++    // Serpantinum: область «рабочий стол» (dock.runningScope = "desk") — как в Windows, на панели задач только
++    // окна текущего рабочего стола (стол = номер рабочего пространства % 100, на всех мониторах сразу) и свёрнутые
++    // с него. С какого стола свёрнуто окно — $XDG_RUNTIME_DIR/serpantinum/minimized.json (пишет scripts/bin/serp-win).
++    property var minDesks: ({})
++    readonly property int curDesk: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id > 0 ? Hyprland.focusedWorkspace.id % 100 : 1
++    onCurDeskChanged: dockWindow._recomputeRunningInfo()
++    function deskOf(w) {
++        if (!w) return -1;
++        if (w.workspace >= 0) return (w.workspace + 1) % 100;        // WindowTracker хранит id - 1
++        let a = "0x" + String(w.nativeId || "").replace(/^0x/, "");
++        return dockWindow.minDesks[a] !== undefined ? dockWindow.minDesks[a] : -1;
++    }
++    FileView {
++        path: (Quickshell.env("XDG_RUNTIME_DIR") || "/run/user/1000") + "/serpantinum/minimized.json"
++        watchChanges: true
++        onFileChanged: reload()
++        onLoaded: { try { dockWindow.minDesks = JSON.parse(text()) || ({}); } catch (e) { dockWindow.minDesks = ({}); } dockWindow._recomputeRunningInfo(); }
++    }
++
+     function _recomputeRunningInfo() {
+         let groups = (typeof WindowTracker !== "undefined" && WindowTracker.groups) ? WindowTracker.groups : {};
+         let newMap = {};
+@@ -29,7 +50,9 @@
+                 let w = grp.windows[i];
+                 let match = false;
+ 
+-                if (scope === "all") {
++                if (scope === "desk") {
++                    match = dockWindow.deskOf(w) === dockWindow.curDesk;
++                } else if (scope === "all") {
+                     match = true;
+                 } else if (scope === "output") {
+                     match = (w.output === "" || w.output === currentOutput);
+@@ -46,6 +69,7 @@
+                 }
+             }
+ 
++            if (scope === "desk") elsewhere = [];
+             let isFoc = here.some(function(w) { return w.focused; });
+             let isFocElse = elsewhere.some(function(w) { return w.focused; });
+             let activeWin = here.length > 0 ? here[0] : (elsewhere.length > 0 ? elsewhere[0] : null);
+@@ -206,6 +230,7 @@
+             let dId = grp.desktopId || "";
+             let rawApp = grp.appId || "";
+             if (!dId && !rawApp) continue;
++            if (dockWindow.effectiveRunningScope === "desk" && !grp.windows.some(function(w) { return dockWindow.deskOf(w) === dockWindow.curDesk; })) continue;
+             let cid = dId !== "" ? ((typeof AppMatcher !== "undefined") ? AppMatcher.canonicalId(dId) : dId.toLowerCase()) : ((typeof AppMatcher !== "undefined") ? AppMatcher.canonicalId(rawApp) : rawApp.toLowerCase());
+             if (!cid) cid = gKey;
+ 
