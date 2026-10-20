@@ -11,7 +11,9 @@ act=$(hyprctl activewindow -j | jq -r '.address // empty')
 case "${1:-all}" in
   all|others)
     : > "$state"
-    for a in $(hyprctl clients -j | jq -r --argjson c "$cur" '.[] | select(.mapped and .workspace.id > 0 and (.workspace.id % 100) == $c) | .address'); do
+    # активное окно — последним: пока оно на месте, Hyprland не ищет, кому отдать фокус
+    for a in $(hyprctl clients -j | jq -r --argjson c "$cur" --arg act "$act" '[.[] | select(.mapped and .workspace.id > 0 and (.workspace.id % 100) == $c)]
+                                                                        | sort_by(.address == $act) | .[].address'); do
       [ "$1" = others ] && [ "$a" = "$act" ] && continue
       echo "$a" >> "$state"
       QUIET=1 "$here/serp-win" min "$a"

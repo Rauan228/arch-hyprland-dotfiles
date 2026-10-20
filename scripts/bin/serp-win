@@ -110,6 +110,16 @@ geom() {   # addr x y w h [opacity]
   [ -n "${6:-}" ] && b="$b ; dispatch hl.dsp.window.set_prop({ prop = \"opacity\", value = \"$6\", window = \"address:$1\" })"
   hyprctl --batch "$b" >/dev/null
 }
+park() {   # addr x y — поставить свёрнутое окно за экран и убедиться, что оно там (Hyprland переносит окно
+           # на скрытый стол в следующем кадре и может пересчитать координаты уже после нашей команды)
+  local i cy
+  for i in 1 2 3 4 5; do
+    hyprctl dispatch "hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" })" >/dev/null
+    sleep 0.04
+    cy=$(hyprctl clients -j | jq -r --arg a "$1" '.[] | select(.address == $a) | .at[1]')
+    [ "${cy:-0}" -ge $(( $3 - 10 )) ] && return 0
+  done
+}
 slide() {  # addr x y [opacity] — только сдвиг (и прозрачность), БЕЗ изменения размера: программа не перерисовывается
   local b="dispatch hl.dsp.window.move({ x = $2, y = $3, window = \"address:$1\" })"
   [ -n "${4:-}" ] && b="$b ; dispatch hl.dsp.window.set_prop({ prop = \"opacity\", value = \"$4\", window = \"address:$1\" })"
@@ -140,7 +150,7 @@ minimize() {
   if [ "${QUIET:-0}" = 1 ]; then                                  # Win+M: сразу за экран, фокус не трогаем
     anim off; slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
     d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
-    slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"; anim default
+    park "$addr" "$tx" "$(( my + mh + OFF_DY ))"; anim default
     return 0
   fi
   # следующее окно на том же столе (по истории фокуса) — получит фокус, как в Windows
@@ -158,7 +168,7 @@ minimize() {
   anim off
   slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
   d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
-  slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
+  park "$addr" "$tx" "$(( my + mh + OFF_DY ))"
   anim default
 }
 
