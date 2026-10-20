@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# serp-win <min|restore|focus|max|close|special|taskbar> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
+# serp-win <min|restore|focus|max|close|special|taskbar|clients> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
 # Окно: 0xADDR — это окно; имя монитора — последнее сфокусированное окно на его рабочем столе; иначе — активное.
 #   min      свернуть как в Windows: окно уходит в скрытый special:minimized, запоминается, с какого
 #            рабочего стола оно ушло, а фокус переходит на следующее окно под ним (а не остаётся на невидимом)
 #   restore  вернуть свёрнутое туда же, откуда свернули (тот же стол и место), поверх остальных и с фокусом
+#   clients  окна для Alt+Tab: как `hyprctl clients -j`, у свёрнутых ещё minDesk — с какого стола свернули
+#   QUIET=1 serp-win min|restore ADDR — без анимации и без смены фокуса (Win+M / Win+Shift+M — serp-minall)
 #   taskbar ADDR... — клик по значку приложения в доке (все окна этого приложения), как в Windows:
 #            окна текущего рабочего стола (и свёрнутые с него): одно активное — свернуть; несколько и одно из них
 #            активно — следующее; иначе — последнее использованное (свёрнутое разворачивается);
@@ -26,6 +28,17 @@ if [ "$act" = special ]; then
   next=$(hyprctl clients -j | jq -r --argjson ws "${ws:-0}" '[.[] | select(.workspace.id == $ws and .mapped and (.hidden | not))]
                                                          | sort_by(.focusHistoryID) | .[0].address // empty')
   [ -n "$next" ] && d "hl.dsp.focus({ window = \"address:$next\" })"
+  exit 0
+fi
+
+if [ "$act" = clients ]; then
+  mini='{}'
+  for f in "$state"/0x*; do
+    [ -e "$f" ] || continue
+    read -r mws _ < "$f" || continue
+    mini=$(jq -c --arg a "$(basename "$f")" --argjson d "$(( ${mws:-1} % 100 ))" '. + {($a): $d}' <<<"$mini")
+  done
+  hyprctl clients -j | jq -c --argjson m "$mini" 'map(if .workspace.id < 0 and $m[.address] then . + {minDesk: $m[.address]} else . end)'
   exit 0
 fi
 
@@ -119,6 +132,12 @@ minimize() {
   tw=$ww; th=$hh
   tx=$(( mx + mw / 2 - ww / 2 )); ty=$(( my + mh + 20 ))
   echo "$ws $x $y $ww $hh $op $tx $ty $tw $th" > "$state/$addr"
+  if [ "${QUIET:-0}" = 1 ]; then                                  # Win+M: сразу за экран, фокус не трогаем
+    anim off; slide "$addr" "$OFF" "$OFF"
+    d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
+    slide "$addr" "$OFF" "$OFF"; anim default
+    return 0
+  fi
   # следующее окно на том же столе (по истории фокуса) — получит фокус, как в Windows
   next=$(jq -r --arg a "$addr" --argjson ws "$ws" '[.[] | select(.address != $a and .workspace.id == $ws and .mapped and (.hidden | not))]
                                                    | sort_by(.focusHistoryID) | .[0].address // empty' <<<"$clients")
@@ -150,7 +169,12 @@ restore() {
   # развёрнутому обновляем отметку, чтобы serp-maxwatch не принял возврат за перетаскивание
   mx="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed/$addr"
   [ -f "$mx" ] && touch "$mx"
-  if [ -n "$tx" ]; then
+  if [ -n "$tx" ] && [ "${QUIET:-0}" = 1 ]; then                 # Win+Shift+M: сразу на место, без анимации
+    anim off
+    d "hl.dsp.window.move({ workspace = \"$ws\", window = \"$w\", silent = true })"
+    geom "$addr" "$x" "$y" "$ww" "$hh" "${op:-1}"
+    anim default
+  elif [ -n "$tx" ]; then
     # мгновенно поставить прозрачным под доком, затем «вылететь» на прежнее место (размер не трогаем —
     # он и так прежний, программа ничего не перерисовывает)
     anim off
