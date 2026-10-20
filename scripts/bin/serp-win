@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# serp-win <min|restore|focus|max|close|special> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
+# serp-win <min|restore|focus|max|close|special|taskbar> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
 # Окно: 0xADDR — это окно; имя монитора — последнее сфокусированное окно на его рабочем столе; иначе — активное.
 #   min      свернуть как в Windows: окно уходит в скрытый special:minimized, запоминается, с какого
 #            рабочего стола оно ушло, а фокус переходит на следующее окно под ним (а не остаётся на невидимом)
 #   restore  вернуть свёрнутое туда же, откуда свернули (тот же стол и место), поверх остальных и с фокусом
+#   taskbar ADDR... — клик по значку приложения в доке (все окна этого приложения), как в Windows:
+#            окна текущего рабочего стола (и свёрнутые с него): одно активное — свернуть; несколько и одно из них
+#            активно — следующее; иначе — последнее использованное (свёрнутое разворачивается);
+#            на этом столе окон нет — перейти к последнему использованному на другом столе
 #   focus    открыть окно как кликом по панели задач Windows: свёрнутое — развернуть, на другом рабочем столе —
 #            сначала переключить стол целиком (на всех мониторах, serp-desk), затем фокус и поверх остальных
 set -euo pipefail
@@ -23,6 +27,40 @@ if [ "$act" = special ]; then
                                                          | sort_by(.focusHistoryID) | .[0].address // empty')
   [ -n "$next" ] && d "hl.dsp.focus({ window = \"address:$next\" })"
   exit 0
+fi
+
+if [ "$act" = taskbar ]; then
+  shift
+  clients=$(hyprctl clients -j)
+  active=$(hyprctl activewindow -j | jq -r '.address // empty')
+  id=$(hyprctl activeworkspace -j | jq -r '.id'); desk=1; [ "$id" -gt 0 ] 2>/dev/null && desk=$(( id % 100 ))
+  # окна приложения: адрес, стол (для свёрнутых — откуда свернули), свёрнуто ли, порядок открытия, давность фокуса
+  rows=""
+  for a in "$@"; do
+    a="${a#address:}"; a="0x${a#0x}"
+    r=$(jq -r --arg a "$a" '.[] | select(.address == $a) | "\(.workspace.id) \(.stableId) \(.focusHistoryID)"' <<<"$clients")
+    [ -n "$r" ] || continue
+    read -r ws sid fh <<<"$r"
+    if [ "$ws" -lt 0 ]; then
+      mws=$(cut -d' ' -f1 "$state/$a" 2>/dev/null || echo "$id"); wd=$(( ${mws:-1} % 100 )); m=1
+    else
+      wd=$(( ws % 100 )); m=0
+    fi
+    rows+="$a $wd $m $((16#$sid)) $fh"$'\n'
+  done
+  [ -n "$rows" ] || exit 0
+  here=$(awk -v d="$desk" '$2 == d' <<<"$rows")
+  if [ -z "$here" ]; then                                         # на этом столе нет — к последнему на другом
+    exec "$0" focus "$(sort -k5 -n <<<"$rows" | head -1 | cut -d' ' -f1)"
+  fi
+  n=$(grep -c . <<<"$here")
+  if awk -v a="$active" '$1 == a && $3 == 0 {f=1} END {exit !f}' <<<"$here"; then
+    [ "$n" -eq 1 ] && exec "$0" min "$active"                    # единственное и активное — свернуть
+    # несколько — следующее по порядку открытия (как перебор окон группы на панели задач)
+    t=$(sort -k4 -n <<<"$here" | awk -v a="$active" '{l[NR]=$1; if ($1 == a) i=NR} END {print l[i % NR + 1]}')
+    exec "$0" focus "$t"
+  fi
+  exec "$0" focus "$(sort -k5 -n <<<"$here" | head -1 | cut -d' ' -f1)"   # последнее использованное
 fi
 
 clients=$(hyprctl clients -j)

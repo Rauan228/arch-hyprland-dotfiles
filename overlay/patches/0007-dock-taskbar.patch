@@ -31,14 +31,15 @@ diff -ru a/quickshell/dock/DockRunningButton.qml b/quickshell/dock/DockRunningBu
 diff -ru a/quickshell/dock/DockWindowApps.qml b/quickshell/dock/DockWindowApps.qml
 --- a/quickshell/dock/DockWindowApps.qml	2026-10-18 22:58:42.376451115 +0500
 +++ b/quickshell/dock/DockWindowApps.qml	2026-10-18 22:58:42.386149622 +0500
-@@ -470,6 +470,13 @@
+@@ -470,6 +470,14 @@
              targetWin = info.elsewhere[0];
          }
  
-+        // Serpantinum: как на панели задач Windows — клик по активному приложению с одним окном сворачивает его
-+        let total = (info.here ? info.here.length : 0) + (info.elsewhere ? info.elsewhere.length : 0);
-+        if (targetWin && total === 1 && targetWin.focused && targetWin.workspace >= 0) {
-+            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "min"]);
++        // Serpantinum: клик как на панели задач Windows — какое окно открыть, свернуть или развернуть, решает
++        // scripts/bin/serp-win taskbar (знает рабочие столы и свёрнутые окна; раньше бралось первое окно списка)
++        let addrs = (info.here || []).concat(info.elsewhere || []).map(function(w) { return String(w.nativeId || ""); }).filter(function(a) { return a !== ""; });
++        if (addrs.length) {
++            Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-win", "taskbar"].concat(addrs));
 +            return;
 +        }
 +
