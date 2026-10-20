@@ -18,11 +18,8 @@ case "${1:-all}" in
       echo "$a" >> "$state"
       QUIET=1 "$here/serp-win" min "$a"
     done
-    if [ "$1" = others ] && [ -n "$act" ]; then
-      hyprctl dispatch "hl.dsp.focus({ window = \"address:$act\" })" >/dev/null
-    else
-      hyprctl dispatch "hl.dsp.focus({ workspace = \"$(hyprctl activeworkspace -j | jq -r '.id')\" })" >/dev/null
-    fi ;;
+    # Win+Home — фокус остаётся на активном; Win+M — фокуса нет ни у кого (как в Windows)
+    [ "$1" = others ] && [ -n "$act" ] && hyprctl dispatch "hl.dsp.focus({ window = \"address:$act\" })" >/dev/null ;;
   restore)
     [ -f "$state" ] || exit 0
     last=""

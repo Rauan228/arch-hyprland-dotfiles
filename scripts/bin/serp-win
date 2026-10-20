@@ -22,8 +22,14 @@ d() { hyprctl dispatch "$1" >/dev/null; }
 # Стол свёрнутых никогда не показываем и окна сами не возвращаем: только закрыть стол и вернуть фокус.
 # Свёрнутые окна стоят за пределами экранов, так что даже мгновенное открытие стола ничего не показывает.
 if [ "$act" = special ]; then
-  d "hl.dsp.focus({ monitor = \"$arg\" })"
-  d 'hl.dsp.workspace.toggle_special("minimized")'
+  # Hyprland сам на миг «открывает и закрывает» скрытый стол при каждом переносе окна туда. Закрываем, только
+  # если стол ещё открыт: toggle по уже закрытому столу открыл бы его снова (и Hyprland втянул бы окна на экран)
+  if hyprctl monitors -j | jq -e --arg m "$arg" 'any(.[]; .name == $m and .specialWorkspace.name == "special:minimized")' >/dev/null; then
+    d "hl.dsp.focus({ monitor = \"$arg\" })"
+    d 'hl.dsp.workspace.toggle_special("minimized")'
+  fi
+  # фокус меняем, только если он оказался на свёрнутом окне
+  hyprctl activewindow -j | jq -e '.workspace.name == "special:minimized"' >/dev/null || exit 0
   ws=$(hyprctl monitors -j | jq -r --arg m "$arg" '.[] | select(.name == $m) | .activeWorkspace.id')
   next=$(hyprctl clients -j | jq -r --argjson ws "${ws:-0}" '[.[] | select(.workspace.id == $ws and .mapped and (.hidden | not))]
                                                          | sort_by(.focusHistoryID) | .[0].address // empty')
@@ -150,7 +156,7 @@ minimize() {
   # свёрнутое окно Hyprland сам не выбирает для фокуса (иначе он открывал скрытый стол и втягивал окна на экран)
   d "hl.dsp.window.set_prop({ prop = \"no_focus\", value = \"1\", window = \"$w\" })"
   if [ "${QUIET:-0}" = 1 ]; then                                  # Win+M: сразу за экран, фокус не трогаем
-    anim off; slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
+    anim off; slide "$addr" "$tx" "$(( my + mh + OFF_DY ))" 0
     d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
     park "$addr" "$tx" "$(( my + mh + OFF_DY ))"; anim default
     return 0
@@ -161,11 +167,8 @@ minimize() {
   anim in; slide "$addr" "$tx" "$ty" 0; sleep "$ANIM"
   # фокус отдаём ДО переноса: иначе Hyprland сам ищет, кому отдать фокус, берёт уже свёрнутое окно
   # из истории, открывает скрытый стол — и на мгновение мелькают свёрнутые окна
-  if [ -n "$next" ]; then
-    d "hl.dsp.focus({ window = \"address:$next\" })"
-  else
-    d "hl.dsp.focus({ workspace = \"$ws\" })"                     # стол пуст — снять фокус с невидимого окна
-  fi
+  # (стол пуст — фокус никому: как в Windows; свёрнутое окно с no_focus Hyprland сам с фокуса снимает)
+  [ -n "$next" ] && d "hl.dsp.focus({ window = \"address:$next\" })"
   # за пределы всех экранов (мгновенно) — тогда скрытый стол, даже если Hyprland на миг его покажет, пуст
   anim off
   slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
