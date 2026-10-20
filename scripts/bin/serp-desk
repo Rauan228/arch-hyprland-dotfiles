@@ -62,9 +62,17 @@ case "$cmd" in
   move)
     n="${2:-1}"; a="${3:-$(hyprctl activewindow -j | jq -r '.address // empty')}"
     [ -n "$a" ] || exit 0
-    mon=$(hyprctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | .monitor')
-    name=$(hyprctl monitors -j | jq -r --argjson id "${mon:-0}" '.[] | select(.id == $id) | .name')
-    d "hl.dsp.window.move({ workspace = \"$(( $(base "$name") + n ))\", window = \"address:$a\", silent = true })"
+    mini="$state/minimized/$a"
+    if [ -f "$mini" ]; then
+      # свёрнутое окно остаётся свёрнутым — меняем только стол, на который оно вернётся (запись serp-win)
+      read -r ows rest < "$mini"
+      echo "$(( ows - ows % 100 + n )) $rest" > "$mini.tmp" && mv -f "$mini.tmp" "$mini"
+      "$(dirname "$(readlink -f "$0")")/serp-win" reindex
+    else
+      mon=$(hyprctl clients -j | jq -r --arg a "$a" '.[] | select(.address == $a) | .monitor')
+      name=$(hyprctl monitors -j | jq -r --argjson id "${mon:-0}" '.[] | select(.id == $id) | .name')
+      d "hl.dsp.window.move({ workspace = \"$(( $(base "$name") + n ))\", window = \"address:$a\", silent = true })"
+    fi
     [ "$n" -gt "$(count)" ] && setcount "$n" ;;
   carry)
     c=$(cur); a=$(hyprctl activewindow -j | jq -r '.address // empty'); [ -n "$a" ] || exit 0

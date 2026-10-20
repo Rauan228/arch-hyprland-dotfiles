@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# serp-win <min|restore|focus|max|close|special|taskbar|clients> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
+# serp-win <min|restore|focus|max|close|special|taskbar|clients|reindex> [монитор | 0xADDR] — действия с окном (кнопки заголовка, панель, док).
 # Окно: 0xADDR — это окно; имя монитора — последнее сфокусированное окно на его рабочем столе; иначе — активное.
 #   min      свернуть как в Windows: окно уходит в скрытый special:minimized, запоминается, с какого
 #            рабочего стола оно ушло, а фокус переходит на следующее окно под ним (а не остаётся на невидимом)
@@ -49,6 +49,9 @@ if [ "$act" = special ]; then
   [ -n "$next" ] && d "hl.dsp.focus({ window = \"address:$next\" })"
   exit 0
 fi
+
+# reindex — пересобрать minimized.json (serp-desk после переноса свёрнутого окна на другой стол)
+if [ "$act" = reindex ]; then index; exit 0; fi
 
 if [ "$act" = clients ]; then
   mini='{}'
