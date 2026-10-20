@@ -1,5 +1,5 @@
 diff --git a/hyprbars/barDeco.cpp b/hyprbars/barDeco.cpp
-index c27653d..fa4d50b 100644
+index c27653d..199a12a 100644
 --- a/hyprbars/barDeco.cpp
 +++ b/hyprbars/barDeco.cpp
 @@ -151,7 +151,7 @@ void CHyprBar::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
@@ -11,23 +11,42 @@ index c27653d..fa4d50b 100644
          damageOnButtonHover();
  
      if (!m_bDragPending || m_bTouchEv || !validMapped(m_pWindow) || m_touchId != 0)
-@@ -277,6 +277,15 @@ void CHyprBar::handleMovement() {
+@@ -247,6 +247,18 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+ }
+ 
+ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
++    // Serpantinum: кнопка стиля windows — выполнить, только если отпустили над той же кнопкой
++    if (m_pressedButton >= 0) {
++        const int i = windowsButtonAt(cursorRelativeToBar());
++        const int pressed = m_pressedButton;
++        m_pressedButton = -1;
++        m_bCancelledDown = false;
++        info.cancelled   = true;
++        if (i == pressed && i < (int)g_pGlobalState->buttons.size())
++            Config::Supplementary::executor()->spawn(g_pGlobalState->buttons[i].cmd);   // как двойной клик: старый "exec" в Lua-конфиге ничего не делал
++        return;
++    }
++
+     if (m_pWindow.lock() != Desktop::focusState()->window())
+         return;
+ 
+@@ -277,6 +289,15 @@ void CHyprBar::handleMovement() {
  }
  
  bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButtonPadding, Config::INTEGER barHeight, Vector2D COORDS, const bool BUTTONSRIGHT) {
 +    if (g_pGlobalState->config.buttonStyle->value() == "windows") {
++        // как в Windows: кнопка срабатывает при ОТПУСКАНИИ над ней (handleUpEvent). Срабатывание на нажатии
++        // сворачивало окно, пока кнопка мыши ещё зажата, — Hyprland держал захват указателя на уезжающем окне,
++        // и после возврата весь рабочий стол рисовался со сдвигом (окно заезжало на второй монитор)
 +        const int i = windowsButtonAt(COORDS);
-+        if (i >= 0) {
-+            Config::Supplementary::executor()->spawn(g_pGlobalState->buttons[i].cmd);   // как двойной клик: старый "exec" в Lua-конфиге ничего не делал
-+            return true;
-+        }
-+        return false;
++        m_pressedButton = i;
++        return i >= 0;
 +    }
 +
      //check if on a button
      float offset = barPadding;
  
-@@ -340,7 +349,42 @@ size_t CHyprBar::getVisibleButtonCount(Config::INTEGER barButtonPadding, Config:
+@@ -340,7 +361,42 @@ size_t CHyprBar::getVisibleButtonCount(Config::INTEGER barButtonPadding, Config:
      return count;
  }
  
@@ -70,7 +89,7 @@ index c27653d..fa4d50b 100644
      const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
      const auto BARPADDING       = g_pGlobalState->config.barPadding->value();
      const auto ALIGNBUTTONS     = g_pGlobalState->config.barButtonsAlignment->value();
-@@ -377,6 +421,37 @@ void CHyprBar::renderBarButtons(CBox* barBox, const float scale, const float a)
+@@ -377,6 +433,37 @@ void CHyprBar::renderBarButtons(CBox* barBox, const float scale, const float a)
  }
  
  void CHyprBar::renderBarButtonsText(CBox* barBox, const float scale, const float a) {
@@ -108,7 +127,7 @@ index c27653d..fa4d50b 100644
      const auto HEIGHT           = g_pGlobalState->config.barHeight->value();
      const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
      const auto BARPADDING       = g_pGlobalState->config.barPadding->value();
-@@ -665,6 +740,17 @@ void CHyprBar::updateRules() {
+@@ -665,6 +752,17 @@ void CHyprBar::updateRules() {
  }
  
  void CHyprBar::damageOnButtonHover() {
@@ -127,7 +146,7 @@ index c27653d..fa4d50b 100644
      const auto BARBUTTONPADDING = g_pGlobalState->config.barButtonPadding->value();
      const auto HEIGHT           = g_pGlobalState->config.barHeight->value();
 diff --git a/hyprbars/barDeco.hpp b/hyprbars/barDeco.hpp
-index a3b4e2d..6abffab 100644
+index a3b4e2d..892e269 100644
 --- a/hyprbars/barDeco.hpp
 +++ b/hyprbars/barDeco.hpp
 @@ -82,6 +82,7 @@ class CHyprBar : public IHyprWindowDecoration {
@@ -138,7 +157,12 @@ index a3b4e2d..6abffab 100644
  
      bool inputIsValid();
      void onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e);
-@@ -114,6 +115,7 @@ class CHyprBar : public IHyprWindowDecoration {
+@@ -110,10 +111,12 @@ class CHyprBar : public IHyprWindowDecoration {
+     bool                m_bTouchEv       = false;
+     bool                m_bDragPending   = false;
+     bool                m_bCancelledDown = false;
++    int                 m_pressedButton  = -1;      // Serpantinum: кнопка (стиль windows), нажатая и ещё не отпущенная
+     int                 m_touchId        = 0;
  
      // store hover state for buttons as a bitfield
      unsigned int m_iButtonHoverState = 0;
