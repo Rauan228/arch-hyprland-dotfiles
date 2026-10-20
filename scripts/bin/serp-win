@@ -147,6 +147,8 @@ minimize() {
   tw=$ww; th=$hh
   tx=$(( mx + mw / 2 - ww / 2 )); ty=$(( my + mh + 20 ))
   echo "$ws $x $y $ww $hh $op $tx $ty $tw $th" > "$state/$addr"
+  # свёрнутое окно Hyprland сам не выбирает для фокуса (иначе он открывал скрытый стол и втягивал окна на экран)
+  d "hl.dsp.window.set_prop({ prop = \"no_focus\", value = \"1\", window = \"$w\" })"
   if [ "${QUIET:-0}" = 1 ]; then                                  # Win+M: сразу за экран, фокус не трогаем
     anim off; slide "$addr" "$tx" "$(( my + mh + OFF_DY ))"
     d "hl.dsp.window.move({ workspace = \"special:minimized\", window = \"$w\", silent = true })"
@@ -181,6 +183,7 @@ restore() {
   if [ -z "$ws" ] || ! hyprctl workspaces -j | jq -e --argjson ws "$ws" 'any(.[]; .id == $ws)' >/dev/null; then
     ws=$(hyprctl activeworkspace -j | jq -r '.id')
   fi
+  d "hl.dsp.window.set_prop({ prop = \"no_focus\", value = \"0\", window = \"$w\" })"
   # развёрнутому обновляем отметку, чтобы serp-maxwatch не принял возврат за перетаскивание
   mx="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/serpantinum/maxed/$addr"
   [ -f "$mx" ] && touch "$mx"
