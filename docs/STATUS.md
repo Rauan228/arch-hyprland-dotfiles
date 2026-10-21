@@ -153,6 +153,13 @@
   `sudo pacman -S --needed easyeffects lsp-plugins-lv2 calf`, затем `scripts/setup-equalizer.sh`
   (служба `config/systemd/ee-eq.service` — EasyEffects в фоне с пресетом live_eq).
 
+## Игры на втором SSD (Kingston A2000 1 ТБ, там же Windows)
+- Linux — на Gigabyte 512 ГБ (PCIe 4.0), игры — на отдельном разделе ext4 «Games» второго SSD (PCIe 3.0): FPS и
+  графика от диска не зависят, загрузки — секунды разницы. NTFS-раздел Windows для Steam под Linux не используем
+  (Valve не рекомендует: права, имена файлов, Proton, «Быстрый запуск» Windows).
+- Шаг 1 — в Windows сжать том C: («Управление дисками»); шаг 2 — `sudo scripts/setup-games-disk.sh` (берёт только
+  неразмеченное место, разделы Windows не трогает) → /mnt/games, папка Steam `/mnt/games/SteamLibrary`.
+
 ## Программы
 - `scripts/install-apps.sh` — Telegram, WhatsApp (ZapZap), Steam, Spotify (spotify-launcher), Discord, Antigravity, Obsidian.
   Включает [multilib] в /etc/pacman.conf (с копией в /var/backups) и ставит 32-битные драйверы для Steam.
