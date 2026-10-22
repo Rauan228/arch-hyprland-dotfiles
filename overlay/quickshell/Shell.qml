@@ -24,7 +24,6 @@ ShellRoot {
     Connections {
         target: Hyprland
         function onRawEvent(ev) {
-            if (fitEvents.indexOf(ev.name) >= 0) fitTimer.restart();
             // новое окно — открыть там, где программа была в прошлый раз (scripts/bin/serp-geom)
             if (ev.name === "openwindow") { geomTimer.addr = String(ev.data).split(",")[0]; geomTimer.restart(); }
             // скрытый стол свёрнутых окон открылся сам (программа попросила фокус) — сразу закрыть (scripts/bin/serp-win)
@@ -39,32 +38,19 @@ ShellRoot {
         }
     }
 
-    // Окна не должны «улетать» за край: после событий окон (и раз в 4 с) serp-fit возвращает плавающие окна
-    // в пределы монитора — уменьшает слишком большие и опускает те, у которых заголовок ушёл за верхний край.
-    // Запуски не накладываются: пока идёт один, следующий только откладывается (раньше копии копились и
-    // засыпали Hyprland запросами — отсюда подвисания и задержка ввода). Смена фокуса окна сюда не входит.
-    readonly property var fitEvents: ["openwindow", "movewindowv2", "changefloatingmode", "monitoradded", "monitorremoved", "fullscreen"]
-    readonly property string fitCmd: Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-fit"
+    // Окна не «улетают» за край, развёрнутые окна, запоминание мест — один постоянный процесс
+    // scripts/bin/serp-windowd: сам слушает события Hyprland и ходит в него через сокет. Раньше на каждое событие
+    // запускалась связка serp-fit → serp-max check → serp-geom save (~100 процессов, ~20 запросов к Hyprland),
+    // и при нескольких рабочих столах это давало подтормаживания курсора и анимаций.
     Timer { id: geomTimer; interval: 180; property string addr: ""
             onTriggered: Quickshell.execDetached([Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-geom", "apply", addr]) }
     Process {
-        id: fitProc
-        property bool again: false
-        command: [shellRoot.fitCmd]
-        onExited: if (again) { again = false; running = true; }
-    }
-    function runFit() { if (fitProc.running) fitProc.again = true; else fitProc.running = true; }
-    Timer { id: fitTimer; interval: 350; onTriggered: shellRoot.runFit() }
-    Timer { interval: 4000; running: true; repeat: true; onTriggered: shellRoot.runFit() }
-    // «развёрнутые» окна (scripts/bin/serp-max): потянули за заголовок — сразу прежний размер, как в Windows.
-    // Следит один постоянный процесс без порождения hyprctl/jq (scripts/bin/serp-maxwatch).
-    Process {
-        id: maxWatch
-        command: [Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-maxwatch"]
+        id: windowd
+        command: [Quickshell.env("HOME") + "/.config/serpantinum/bin/serp-windowd"]
         running: true
-        onExited: restartWatch.start()          // упал — перезапустить через 2 с
+        onExited: restartWindowd.start()        // упал — перезапустить через 2 с
     }
-    Timer { id: restartWatch; interval: 2000; onTriggered: maxWatch.running = true }
+    Timer { id: restartWindowd; interval: 2000; onTriggered: windowd.running = true }
 
     WallpaperEngine {}
     Main {}

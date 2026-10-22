@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""serp-windowd — один постоянный процесс вместо связки скриптов окон, которые раньше запускались на каждое
+событие (serp-fit → serp-max check → serp-geom save: ~100 процессов и ~20 запросов к Hyprland на событие; при
+4 рабочих столах и переключениях это давало подтормаживания курсора и анимаций).
+
+Что делает (логика прежних скриптов, но в одном процессе и через сокет Hyprland, без hyprctl/jq):
+  • окна не «улетают»: плавающее окно больше экрана — уменьшить; заголовок ушёл за верх — опустить; окно почти
+    целиком за краем — вернуть так, чтобы было за что схватить                         (было serp-fit)
+  • программа сама развернулась (режим Hyprland «maximized») или развёрнутое окно потянули за заголовок —
+    позвать serp-max check (только тогда)                                             (было serp-max check / serp-maxwatch)
+  • запомнить место и размер окон по программам → ~/.local/state/serpantinum/geometry.json
+                                                                                       (было serp-geom save)
+Когда: после событий окон (с паузой 0,35 с, чтобы серия событий дала одну проверку), раз в 4 с, и раз в 0,15 с —
+только пока есть развёрнутые окна (быстрый возврат прежнего размера при перетаскивании за заголовок)."""
+import json, os, re, select, socket, subprocess, time
+
+RUN = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+HYPR = f"{RUN}/hypr/{os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', '')}"
+MAXED, MINIMIZED = f"{RUN}/serpantinum/maxed", f"{RUN}/serpantinum/minimized"
+STORE = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "serpantinum/geometry.json")
+SERP_MAX = os.path.join(os.path.dirname(os.path.realpath(__file__)), "serp-max")
+BAR, GAP, KEEP = 32, 8, 160
+SKIP = re.compile(r"^(org\.quickshell|quickshell|xdg-desktop-portal.*|polkit.*|serp-info|hyprland-run|)$")
+EVENTS = {"openwindow", "movewindowv2", "changefloatingmode", "monitoradded", "monitorremoved", "fullscreen"}
+
+
+def ask(cmd):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(2)
+        s.connect(f"{HYPR}/.socket.sock")
+        s.sendall(cmd.encode())
+        buf = b""
+        while chunk := s.recv(65536):
+            buf += chunk
+    return buf.decode(errors="replace")
+
+
+def j(cmd):
+    return json.loads(ask(f"j/{cmd}"))
+
+
+def dispatch(expr):
+    ask(f"dispatch {expr}")
+
+
+def names(d):
+    try:
+        return {f for f in os.listdir(d) if f.startswith("0x")}
+    except OSError:
+        return set()
+
+
+def logical(m):
+    return m["x"], m["y"], int(m["width"] / m["scale"]), int(m["height"] / m["scale"])
+
+
+def fit(clients, mons, skip):
+    """serp-fit: вернуть плавающие окна в пределы их монитора."""
+    by_id = {m["id"]: m for m in mons}
+    for c in clients:
+        if not (c["floating"] and c["fullscreen"] == 0 and c["mapped"] and c["workspace"]["id"] > 0):
+            continue
+        if c["address"] in skip or c["monitor"] not in by_id:
+            continue
+        m = by_id[c["monitor"]]
+        mx, my, lw, lh = logical(m)
+        rt, rb = m["reserved"][1], m["reserved"][3]
+        w = min(c["size"][0], lw - 2 * GAP)
+        h = min(c["size"][1], lh - rt - rb - BAR - 2 * GAP)
+        x = min(max(c["at"][0], mx - w + KEEP), mx + lw - KEEP)
+        y = min(max(c["at"][1], my + rt + BAR + GAP), my + lh - rb - 60)
+        a = c["address"]
+        if (w, h) != tuple(c["size"]):
+            dispatch(f'hl.dsp.window.resize({{ x = {w}, y = {h}, window = "address:{a}" }})')
+        if (x, y) != tuple(c["at"]) or (w, h) != tuple(c["size"]):
+            dispatch(f'hl.dsp.window.move({{ x = {x}, y = {y}, window = "address:{a}" }})')
+
+
+def maxed_needs_check(clients, maxed):
+    """развёрнутые (serp-max): программа сама развернулась, развёрнутое потянули / изменили / закрыли."""
+    by_addr = {c["address"]: c for c in clients}
+    if any(c["fullscreen"] == 1 and c["workspace"]["id"] > 0 for c in clients):
+        return True
+    mini = names(MINIMIZED)
+    now = time.time()
+    for a in maxed:
+        try:
+            if now - os.stat(f"{MAXED}/{a}").st_mtime < 1:
+                continue                                    # serp-max ещё ставит окно на место
+            rec = open(f"{MAXED}/{a}").read().split()
+        except OSError:
+            continue
+        c = by_addr.get(a)
+        if c is None:
+            return True                                     # окно закрыто — убрать запись
+        if c["workspace"]["id"] < 0 or a in mini:
+            continue                                        # свёрнуто — не трогаем
+        try:
+            area = [int(v) for v in rec[4:8]]
+        except (ValueError, IndexError):
+            return True
+        if [c["at"][0], c["at"][1], c["size"][0], c["size"][1]] != area:
+            return True
+    return False
+
+
+def save_geometry(clients, mons, maxed):
+    """serp-geom save: место и размер окон по программе; для развёрнутых — их «обычный» размер."""
+    try:
+        store = json.load(open(STORE))
+    except (OSError, ValueError):
+        store = {}
+    old = json.dumps(store, sort_keys=True)
+    extra = {}
+    for a in maxed:
+        try:
+            extra[a] = [int(v) for v in open(f"{MAXED}/{a}").read().split()[:4]]
+        except (OSError, ValueError):
+            pass
+    mini = names(MINIMIZED)
+    by_id = {m["id"]: m for m in mons}
+    for c in clients:
+        if not (c["floating"] and c["mapped"] and c["workspace"]["id"] > 0 and c["fullscreen"] == 0):
+            continue
+        if SKIP.match(c["class"]) or c["address"] in mini or c["monitor"] not in by_id:
+            continue
+        m = by_id[c["monitor"]]
+        e = extra.get(c["address"])
+        g = e or [c["at"][0], c["at"][1], c["size"][0], c["size"][1]]
+        store[c["class"]] = {"x": g[0], "y": g[1], "w": g[2], "h": g[3], "monitor": m["name"],
+                             "max": e is not None and c["size"][0] >= m["width"] / m["scale"] - 2}
+    if json.dumps(store, sort_keys=True) != old:
+        os.makedirs(os.path.dirname(STORE), exist_ok=True)
+        with open(STORE + ".tmp", "w") as f:
+            json.dump(store, f)
+        os.replace(STORE + ".tmp", STORE)
+
+
+def events():
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(f"{HYPR}/.socket2.sock")
+    s.setblocking(False)
+    return s
+
+
+def main():
+    ev, buf = events(), b""
+    due = time.time() + 1          # проверка «после событий» (с паузой)
+    next_full = time.time() + 4    # плановая проверка
+    last_geom = 0.0
+    while True:
+        maxed = names(MAXED)
+        timeout = 0.15 if maxed else 1.0
+        wait = max(0.0, min(due, next_full) - time.time()) if due else max(0.0, next_full - time.time())
+        r, _, _ = select.select([ev], [], [], min(timeout, wait))
+        if r:
+            try:
+                chunk = ev.recv(65536)
+            except OSError:
+                chunk = b""
+            if not chunk:                                   # Hyprland перезапустился / сокет закрыт
+                time.sleep(1); ev, buf = events(), b""; continue
+            buf += chunk
+            *lines, buf = buf.split(b"\n")
+            if any(l.split(b">>", 1)[0].decode(errors="replace") in EVENTS for l in lines):
+                due = time.time() + 0.35
+        now = time.time()
+        full = now >= next_full or (due and now >= due)
+        if not full and not maxed:
+            continue
+        try:
+            clients = j("clients")
+            mons = j("monitors") if full else []
+        except (OSError, ValueError):
+            time.sleep(1); continue
+        if maxed_needs_check(clients, maxed):
+            subprocess.run([SERP_MAX, "check"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+            clients = j("clients")
+        if full:
+            fit(clients, mons, maxed | names(MINIMIZED))
+            if now - last_geom >= 3:
+                save_geometry(clients, mons, maxed)
+                last_geom = now
+            due, next_full = 0, now + 4
+
+
+if __name__ == "__main__":
+    while True:
+        try:
+            main()
+        except Exception:
+            time.sleep(2)
